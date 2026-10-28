@@ -86,3 +86,5 @@ build.sh                      手工构建脚本
 ## 许可
 
 [GNU General Public License v3.0](LICENSE) © 2026 yy7511
+
+本说明由ai撰写，请注意甄别
