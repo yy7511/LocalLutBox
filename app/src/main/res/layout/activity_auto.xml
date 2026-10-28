@@ -275,6 +275,31 @@
                     android:textColor="@color/muted"
                     android:textSize="10sp" />
 
+                <TextView
+                    android:id="@+id/btnDelete"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/bg_chip"
+                    android:paddingLeft="10dp"
+                    android:paddingRight="10dp"
+                    android:paddingTop="5dp"
+                    android:paddingBottom="5dp"
+                    android:text="处理后删除原文件：关"
+                    android:textColor="@color/muted"
+                    android:textSize="10sp"
+                    android:clickable="true"
+                    android:focusable="true" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:lineSpacingExtra="2dp"
+                    android:text="开启后，成功输出 LUT 图片才删除输入文件夹中的原文件；删除不可恢复，建议把输出文件夹指向别处"
+                    android:textColor="@color/muted"
+                    android:textSize="10sp" />
+
                 <LinearLayout
                     android:id="@+id/autoAdjustList"
                     android:layout_width="match_parent"

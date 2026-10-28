@@ -42,6 +42,13 @@ if git diff --cached --quiet; then
 else
   git commit -q -m "LocalLutBox ${VERSION_NAME:-update}: source update"
 fi
+# GitHub side edits (README, etc.) may have landed since the last build: rebase first.
+git fetch -q origin main 2>/dev/null || true
+if git rev-parse --verify -q origin/main >/dev/null; then
+  if ! git merge-base --is-ancestor origin/main HEAD; then
+    git pull --rebase -q --autostash origin main
+  fi
+fi
 git push -q -u origin main
 
 if [ -z "$APK" ] || [ ! -f "$APK" ]; then
@@ -58,6 +65,7 @@ LocalLutBox $VER
 
 - 完全离线的 LUT 调色：.cube / .xmp / .3dl 导入，多图编辑，直方图与矢量示波器
 - 文件夹自动处理新增照片，按 ICC 自动转换到 LUT 目标色彩空间，输出统一 sRGB
+- 可选：输出成功后删除输入文件夹中的原文件（默认关闭，开启前有确认提示）
 - 输出保留原始 EXIF，默认原图尺寸 + JPEG 质量 100（不压缩）
 - R8 混淆 + 资源名折叠，LUT 缓存 AES-256-GCM 加密
 - 支持 Android 7.0+ 与鸿蒙 4.x；鸿蒙需在“应用启动管理”中允许后台活动

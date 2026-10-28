@@ -68,6 +68,8 @@ public final class Store {
         public int maxDim = 0;
         /** JPEG quality; 100 = keep the most detail. */
         public int quality = 100;
+        /** Delete the source photo from the input folder after a successful export. */
+        public boolean deleteSource;
 
         public AutoCfg copy() {
             AutoCfg a = new AutoCfg();
@@ -79,6 +81,7 @@ public final class Store {
             a.convertSpace = convertSpace;
             a.maxDim = maxDim;
             a.quality = quality;
+            a.deleteSource = deleteSource;
             return a;
         }
     }
@@ -174,6 +177,7 @@ public final class Store {
         cfg.convertSpace = p.getBoolean("auto_space", true);
         cfg.maxDim = p.getInt("auto_maxdim", 0);
         cfg.quality = p.getInt("auto_quality", 100);
+        cfg.deleteSource = p.getBoolean("auto_delete_source", false);
         return cfg;
     }
 
@@ -187,6 +191,7 @@ public final class Store {
                 .putBoolean("auto_space", cfg.convertSpace)
                 .putInt("auto_maxdim", cfg.maxDim)
                 .putInt("auto_quality", cfg.quality)
+                .putBoolean("auto_delete_source", cfg.deleteSource)
                 .apply();
     }
 

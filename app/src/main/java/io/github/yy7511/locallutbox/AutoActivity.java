@@ -52,6 +52,7 @@ public class AutoActivity extends BaseActivity {
     private TextView battState;
     private TextView btnSpace;
     private TextView btnSize;
+    private TextView btnDelete;
     private LinearLayout adjustList;
 
     private int pendingAction; // 0 = none, 1 = start watching, 2 = process existing files
@@ -83,6 +84,7 @@ public class AutoActivity extends BaseActivity {
         battState = (TextView) findViewById(R.id.battState);
         btnSpace = (TextView) findViewById(R.id.btnSpace);
         btnSize = (TextView) findViewById(R.id.btnSize);
+        btnDelete = (TextView) findViewById(R.id.btnDelete);
         adjustList = (LinearLayout) findViewById(R.id.autoAdjustList);
 
         cfg = Store.auto(this);
@@ -177,6 +179,33 @@ public class AutoActivity extends BaseActivity {
             @Override
             public void onClick(View v) {
                 toggleService();
+            }
+        });
+        btnDelete.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (cfg.deleteSource) {
+                    cfg.deleteSource = false;
+                    Store.saveAuto(AutoActivity.this, cfg);
+                    syncUi();
+                    Ui.toast(AutoActivity.this, "已关闭：原文件会保留");
+                    return;
+                }
+                new AlertDialog.Builder(AutoActivity.this)
+                        .setTitle("处理后删除原文件")
+                        .setMessage("开启后，只有成功输出 LUT 图片才会删除输入文件夹中的原文件。\n"
+                                + "删除不可恢复；若输出文件夹与输入文件夹相同，原图与成品会混在一起，建议先把输出指向别处。")
+                        .setPositiveButton("仍要开启", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                cfg.deleteSource = true;
+                                Store.saveAuto(AutoActivity.this, cfg);
+                                syncUi();
+                                Ui.toast(AutoActivity.this, "已开启：输出成功后删除原文件");
+                            }
+                        })
+                        .setNegativeButton("取消", null)
+                        .show();
             }
         });
         findViewById(R.id.btnProcessAll).setOnClickListener(new View.OnClickListener() {
@@ -616,6 +645,9 @@ public class AutoActivity extends BaseActivity {
         btnSize.setText(sizeLabel());
         btnSize.setTextColor(cfg.maxDim <= 0 ? Ui.ACCENT : Ui.MUTED);
         btnSize.setBackgroundResource(cfg.maxDim <= 0 ? R.drawable.bg_chip_sel : R.drawable.bg_chip);
+        btnDelete.setText(cfg.deleteSource ? "处理后删除原文件：开" : "处理后删除原文件：关");
+        btnDelete.setTextColor(cfg.deleteSource ? Ui.ACCENT : Ui.MUTED);
+        btnDelete.setBackgroundResource(cfg.deleteSource ? R.drawable.bg_chip_sel : R.drawable.bg_chip);
         btnToggle.setText(running ? "停止自动处理" : "开启自动处理");
         btnToggle.setBackgroundResource(running ? R.drawable.bg_btn_ghost : R.drawable.bg_btn);
         btnToggle.setTextColor(running ? Ui.TEXT : Ui.ON_ACCENT);

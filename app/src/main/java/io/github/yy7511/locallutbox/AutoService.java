@@ -270,6 +270,20 @@ public class AutoService extends Service {
             }
             String tree = cfg.outTree == null || cfg.outTree.length() == 0 ? cfg.inTree : cfg.outTree;
             ImageUtil.saveToTree(getContentResolver(), tree, outName, out, cfg.quality, docUri);
+            String delNote = "";
+            if (cfg.deleteSource) {
+                try {
+                    if (DocumentsContract.deleteDocument(getContentResolver(), docUri)) {
+                        delNote = "，已删除原文件";
+                    } else {
+                        delNote = "，原文件删除失败";
+                        Store.log(this, "  未能删除原文件：" + doc.name);
+                    }
+                } catch (Exception e) {
+                    delNote = "，原文件删除失败";
+                    Store.log(this, "  未能删除原文件：" + doc.name + "：" + e.getMessage());
+                }
+            }
             String spaceNote = "";
             if (cfg.convertSpace) {
                 int target = lut == null ? ColorSpace.SRGB : ColorSpace.clampSpace(lut.space);
@@ -278,7 +292,7 @@ public class AutoService extends Service {
                             + " → sRGB）";
                 }
             }
-            Store.log(this, "✓ " + doc.name + " → " + outName + spaceNote
+            Store.log(this, "✓ " + doc.name + " → " + outName + spaceNote + delNote
                     + (reduced ? "（内存不足，按长边 3000 处理）" : ""));
             return true;
         } catch (Throwable t) {
