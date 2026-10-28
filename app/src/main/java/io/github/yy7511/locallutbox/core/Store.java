@@ -273,6 +273,24 @@ public final class Store {
         sp(c).edit().putString("last_lut", id == null ? "" : id).apply();
     }
 
+    /** Editor LUT preview size: 0 small, 1 medium (default), 2 large. */
+    public static int lutThumbSize(Context c) {
+        return sp(c).getInt("lut_thumb", 1);
+    }
+
+    public static void setLutThumbSize(Context c, int level) {
+        sp(c).edit().putInt("lut_thumb", Math.max(0, Math.min(2, level))).apply();
+    }
+
+    /** Analysis strip on the editor: 0 histogram, 1 vectorscope, 2 both (default), 3 hidden. */
+    public static int graphChoice(Context c) {
+        return sp(c).getInt("editor_graph", 2);
+    }
+
+    public static void setGraphChoice(Context c, int choice) {
+        sp(c).edit().putInt("editor_graph", Math.max(0, Math.min(3, choice))).apply();
+    }
+
     /** App theme preference: true = dark (default), false = light. */
     public static boolean darkMode(Context c) {
         return sp(c).getBoolean("dark_mode", true);

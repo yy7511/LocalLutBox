@@ -69,13 +69,14 @@ public class EditorActivity extends BaseActivity {
     private LinearLayout lutChips;
     private View paneAdjust;
     private LinearLayout paneLut;
-    private LinearLayout paneAnalysis;
     private TextView tabAdjust;
     private TextView tabLut;
-    private TextView tabAnalysis;
 
     private HistogramView histogram;
     private VectorscopeView vectorscope;
+    private View analysisStrip;
+    private TextView btnGraph;
+    private TextView btnLutSize;
     private View editorBar;
     private View pagerBar;
     private View panel;
@@ -116,10 +117,11 @@ public class EditorActivity extends BaseActivity {
         lutChips = (LinearLayout) findViewById(R.id.lutChips);
         paneAdjust = findViewById(R.id.paneAdjust);
         paneLut = (LinearLayout) findViewById(R.id.paneLut);
-        paneAnalysis = (LinearLayout) findViewById(R.id.paneAnalysis);
         tabAdjust = (TextView) findViewById(R.id.tabAdjust);
         tabLut = (TextView) findViewById(R.id.tabLut);
-        tabAnalysis = (TextView) findViewById(R.id.tabAnalysis);
+        analysisStrip = findViewById(R.id.analysisStrip);
+        btnGraph = (TextView) findViewById(R.id.btnGraph);
+        btnLutSize = (TextView) findViewById(R.id.btnLutSize);
         histogram = (HistogramView) findViewById(R.id.histogram);
         vectorscope = (VectorscopeView) findViewById(R.id.vectorscope);
         editorBar = findViewById(R.id.editorBar);
@@ -145,6 +147,8 @@ public class EditorActivity extends BaseActivity {
         bindTabs();
         bindActions();
         selectTab(0);
+        applyGraph();
+        syncSizeButton();
         loadCurrent();
     }
 
@@ -183,21 +187,13 @@ public class EditorActivity extends BaseActivity {
                 selectTab(1);
             }
         });
-        tabAnalysis.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                selectTab(2);
-            }
-        });
     }
 
     private void selectTab(int which) {
         paneAdjust.setVisibility(which == 0 ? View.VISIBLE : View.GONE);
         paneLut.setVisibility(which == 1 ? View.VISIBLE : View.GONE);
-        paneAnalysis.setVisibility(which == 2 ? View.VISIBLE : View.GONE);
         Ui.setTab(tabAdjust, which == 0);
         Ui.setTab(tabLut, which == 1);
-        Ui.setTab(tabAnalysis, which == 2);
     }
 
     private void bindActions() {
@@ -234,6 +230,21 @@ public class EditorActivity extends BaseActivity {
                     scheduleRender();
                     Ui.toast(EditorActivity.this, "参数已重置");
                 }
+            }
+        });
+        btnGraph.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showGraphDialog();
+            }
+        });
+        btnLutSize.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                int next = (Store.lutThumbSize(EditorActivity.this) + 1) % 3;
+                Store.setLutThumbSize(EditorActivity.this, next);
+                syncSizeButton();
+                buildLutChips();
             }
         });
         imgPreview.setOnTouchListener(new View.OnTouchListener() {
@@ -292,7 +303,54 @@ public class EditorActivity extends BaseActivity {
         editorBar.setVisibility(vis);
         pagerBar.setVisibility(vis);
         panel.setVisibility(vis);
+        applyGraph();
         updateHint();
+    }
+
+    /** Shows the histogram / vectorscope strip according to the user's choice. */
+    private void applyGraph() {
+        int choice = Store.graphChoice(this);
+        boolean show = choice != 3 && !fullscreen;
+        analysisStrip.setVisibility(show ? View.VISIBLE : View.GONE);
+        histogram.setVisibility(choice == 1 ? View.GONE : View.VISIBLE);
+        vectorscope.setVisibility(choice == 0 ? View.GONE : View.VISIBLE);
+        LinearLayout.LayoutParams vp = (LinearLayout.LayoutParams) vectorscope.getLayoutParams();
+        if (choice == 1) {
+            vp.width = 0;
+            vp.weight = 1;
+        } else {
+            vp.width = Ui.dp(this, 88);
+            vp.weight = 0;
+        }
+        vectorscope.setLayoutParams(vp);
+    }
+
+    private void showGraphDialog() {
+        final String[] items = {"直方图", "矢量图", "直方图 + 矢量图", "关闭"};
+        int checked = Store.graphChoice(this);
+        new AlertDialog.Builder(this)
+                .setTitle("编辑页显示")
+                .setSingleChoiceItems(items, checked, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        Store.setGraphChoice(EditorActivity.this, which);
+                        applyGraph();
+                        dialog.dismiss();
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void syncSizeButton() {
+        String[] labels = {"小", "中", "大"};
+        btnLutSize.setText("预览大小：" + labels[Store.lutThumbSize(this)]);
+    }
+
+    /** LUT preview edge in dp; level 0/1/2 -> 56 / 72 / 92. */
+    private int thumbDp() {
+        int level = Store.lutThumbSize(this);
+        return level == 0 ? 56 : (level == 2 ? 92 : 72);
     }
 
     private void updateHint() {
@@ -545,16 +603,17 @@ public class EditorActivity extends BaseActivity {
         chip.setOrientation(LinearLayout.VERTICAL);
         chip.setGravity(Gravity.CENTER_HORIZONTAL);
         chip.setBackgroundResource(selected ? R.drawable.bg_chip_sel : R.drawable.bg_chip);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(this, 76),
-                ViewGroup.LayoutParams.MATCH_PARENT);
-        lp.setMargins(Ui.dp(this, 3), Ui.dp(this, 6), Ui.dp(this, 3), Ui.dp(this, 6));
+        int thumb = Ui.dp(this, thumbDp());
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(thumb + Ui.dp(this, 10),
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(Ui.dp(this, 3), Ui.dp(this, 4), Ui.dp(this, 3), 0);
         chip.setLayoutParams(lp);
         chip.setPadding(Ui.dp(this, 5), Ui.dp(this, 5), Ui.dp(this, 5), Ui.dp(this, 5));
 
         final ImageView iv = new ImageView(this);
         iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
         iv.setBackgroundResource(R.drawable.bg_thumb);
-        chip.addView(iv, new LinearLayout.LayoutParams(Ui.dp(this, 62), Ui.dp(this, 62)));
+        chip.addView(iv, new LinearLayout.LayoutParams(thumb, thumb));
 
         TextView tv = Ui.text(this, name, 9, selected ? Ui.ACCENT : Ui.TEXT);
         tv.setMaxLines(1);
@@ -566,7 +625,7 @@ public class EditorActivity extends BaseActivity {
         chip.addView(tv, tlp);
 
         if (lutId.length() == 0) {
-            ThumbLoader.load(iv, entry.uri, 72);
+            ThumbLoader.load(iv, entry.uri, thumb);
         } else {
             iv.setTag("chipthumb:" + lutId);
         }
@@ -574,10 +633,9 @@ public class EditorActivity extends BaseActivity {
         chip.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (lutId.length() == 0) {
-                    selectLut("");
-                } else {
-                    showLutDetail(lutId);
+                selectLut(lutId);
+                if (lutId.length() > 0) {
+                    Ui.toast(EditorActivity.this, "已套用");
                 }
             }
         });
@@ -585,8 +643,7 @@ public class EditorActivity extends BaseActivity {
             @Override
             public boolean onLongClick(View v) {
                 if (lutId.length() > 0) {
-                    selectLut(lutId);
-                    Ui.toast(EditorActivity.this, "已套用");
+                    showLutDetail(lutId);
                     return true;
                 }
                 return false;
@@ -682,9 +739,9 @@ public class EditorActivity extends BaseActivity {
         chip.setOrientation(LinearLayout.VERTICAL);
         chip.setGravity(Gravity.CENTER);
         chip.setBackgroundResource(R.drawable.bg_chip);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(this, 76),
-                ViewGroup.LayoutParams.MATCH_PARENT);
-        lp.setMargins(Ui.dp(this, 3), Ui.dp(this, 6), Ui.dp(this, 3), Ui.dp(this, 6));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                Ui.dp(this, thumbDp()) + Ui.dp(this, 10), ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(Ui.dp(this, 3), Ui.dp(this, 4), Ui.dp(this, 3), 0);
         chip.setLayoutParams(lp);
 
         ImageView iv = new ImageView(this);
