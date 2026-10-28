@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Light palette: pale blue + white. Dark palette lives in values-night.
+         Accent/text pairs are checked against WCAG 2.1 AA (>= 4.5:1). -->
+    <color name="bg">#F6FAFD</color>
+    <color name="bg2">#FFFFFF</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface2">#EAF4FB</color>
+    <color name="stroke">#D6E7F3</color>
+    <color name="text">#0D1E29</color>
+    <color name="muted">#4F6B80</color>
+    <color name="accent">#177095</color>
+    <color name="on_accent">#FFFFFF</color>
+    <color name="teal">#0F7D8A</color>
+    <color name="red">#C0392B</color>
+    <color name="icon_bg">#F6FAFD</color>
+    <color name="thumb_bg">#E8F3FA</color>
+    <color name="chip_sel_bg">#DCEFFB</color>
+    <color name="ghost_stroke">#C4DAE9</color>
+    <color name="bar_bg">#F4FFFFFF</color>
+    <color name="badge_bg">#E5F2FB</color>
+    <color name="photo_bg">#E6EDF4</color>
+</resources>

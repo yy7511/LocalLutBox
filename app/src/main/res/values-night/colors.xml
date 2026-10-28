@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark palette: near-black surfaces with a pale blue accent. -->
+    <color name="bg">#050809</color>
+    <color name="bg2">#0B1218</color>
+    <color name="surface">#0F171E</color>
+    <color name="surface2">#132430</color>
+    <color name="stroke">#223342</color>
+    <color name="text">#EEF6FC</color>
+    <color name="muted">#93AEC2</color>
+    <color name="accent">#6EC8F4</color>
+    <color name="on_accent">#04141C</color>
+    <color name="teal">#4FD3C7</color>
+    <color name="red">#F27A76</color>
+    <color name="icon_bg">#050809</color>
+    <color name="thumb_bg">#111D26</color>
+    <color name="chip_sel_bg">#153A50</color>
+    <color name="ghost_stroke">#263847</color>
+    <color name="bar_bg">#EA050809</color>
+    <color name="badge_bg">#12293A</color>
+    <color name="photo_bg">#000000</color>
+</resources>
