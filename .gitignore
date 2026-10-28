@@ -5,3 +5,4 @@ build/
 *.idsig
 tools/debug.keystore
 LutDarkroom-*.apk
+LocalLutBox-*.apk

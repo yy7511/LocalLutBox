@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Commits the whole project and pushes it to the public GitHub repository.
+# Commits the source to main and uploads the APK to the GitHub Release for its version.
+# Usage: tools/publish.sh [path/to/LocalLutBox-x.y.z.apk]
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OWNER=${OWNER:-yy7511}
 REPO=${REPO:-LocalLutBox}
 URL="https://github.com/$OWNER/$REPO.git"
+APK=${1:-}
 
 if ! gh auth status >/dev/null 2>&1; then
   echo "publish: skipped (gh not logged in)"
@@ -33,11 +35,41 @@ else
   git remote add origin "$URL"
 fi
 
+# Source only: the APK is distributed through Releases, not the main tree.
 git add -A
 if git diff --cached --quiet; then
-  echo "publish: nothing to commit"
+  echo "publish: no source changes"
 else
-  git commit -q -m "LocalLutBox 1.1.0: package io.github.yy7511.locallutbox, R8 obfuscation, encrypted LUT cache, GPLv3"
+  git commit -q -m "LocalLutBox ${VERSION_NAME:-update}: source update"
 fi
 git push -q -u origin main
-echo "publish: $OWNER/$REPO (public) -> $(git rev-parse --short HEAD)"
+
+if [ -z "$APK" ] || [ ! -f "$APK" ]; then
+  echo "publish: no APK given, source pushed only"
+  exit 0
+fi
+
+NAME="$(basename "$APK")"
+VER="${NAME#LocalLutBox-}"
+VER="${VER%.apk}"
+TAG="v$VER"
+NOTES=$(cat <<EOF
+LocalLutBox $VER
+
+- 完全离线的 LUT 调色：.cube / .xmp / .3dl 导入，多图编辑，直方图与矢量示波器
+- 文件夹自动处理新增照片，按 ICC 自动转换到 LUT 目标色彩空间，输出统一 sRGB
+- 输出保留原始 EXIF，默认原图尺寸 + JPEG 质量 100（不压缩）
+- R8 混淆 + 资源名折叠，LUT 缓存 AES-256-GCM 加密
+- 支持 Android 7.0+ 与鸿蒙 4.x；鸿蒙需在“应用启动管理”中允许后台活动
+
+安装：下载 APK，允许“安装未知来源应用”即可，无需联网。
+EOF
+)
+
+if gh release view "$TAG" >/dev/null 2>&1; then
+  gh release upload "$TAG" "$APK" --clobber
+  gh release edit "$TAG" --title "LocalLutBox $VER" --notes "$NOTES" >/dev/null
+else
+  gh release create "$TAG" "$APK" --title "LocalLutBox $VER" --notes "$NOTES" >/dev/null
+fi
+echo "publish: $OWNER/$REPO (public) main=$(git rev-parse --short HEAD) release=$TAG"

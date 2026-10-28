@@ -98,5 +98,5 @@ fi
 ls -lh "$APK_FINAL"
 echo "OK: $APK_FINAL"
 
-echo "[publish] GitHub public repo"
-"$ROOT/tools/publish.sh" || echo "publish: skipped (not logged in or push failed)"
+echo "[publish] GitHub public repo (main = source, APK -> Release)"
+VERSION_NAME="$VERSION_NAME" "$ROOT/tools/publish.sh" "$APK_FINAL" || echo "publish: skipped (not logged in or push failed)"
