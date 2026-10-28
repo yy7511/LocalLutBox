@@ -69,14 +69,6 @@ tools/make_icons.py           图标生成脚本
 build.sh                      手工构建脚本
 ```
 
-## 实现说明
-
-- 纯 Android Framework API，无 AndroidX、无 GMS、无第三方依赖；Java 8 语法
-- 调色在 `int[]` 上进行，多线程按行并行，三线性插值采样 3D LUT；清晰度用可分离盒式模糊
-- LUT 缓存以 AES-256-GCM 加密存储，密钥由 APK 签名证书派生，缓存拷出应用沙箱无法读取
-- 发布包经 R8 混淆（类/成员重命名、组件与自定义 View 按规则保留）、资源名折叠、去除调试信息
-- 目录监听使用 SAF + ContentObserver + 6 秒轮询（SAF 目录无法使用 FileObserver）
-
 ## 已知限制
 
 - 不支持 HEIC / AVIF 解码
