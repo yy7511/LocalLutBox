@@ -230,10 +230,13 @@
                     android:paddingTop="4dp">
 
                     <TextView
+                        android:id="@+id/lutHint"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="短按套用 · 长按看参数与全屏预览"
+                        android:ellipsize="middle"
+                        android:maxLines="1"
+                        android:text="短按叠加/移除 · 长按看参数与全屏预览"
                         android:textColor="@color/muted"
                         android:textSize="10sp" />
 

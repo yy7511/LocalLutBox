@@ -31,7 +31,8 @@ public final class Store {
     public static final class ImageEntry {
         public String uri;
         public String name;
-        public String lutId = "";
+        /** Applied LUTs, bottom layer first. Empty = straight to the source photo. */
+        public ArrayList<String> lutIds = new ArrayList<String>();
         public Adjust adj = new Adjust();
 
         public ImageEntry() {
@@ -59,7 +60,8 @@ public final class Store {
     public static final class AutoCfg {
         public String inTree = "";
         public String outTree = "";
-        public String lutId = "";
+        /** Fixed LUT stack applied to every new file, bottom layer first. */
+        public ArrayList<String> lutIds = new ArrayList<String>();
         public Adjust adj = new Adjust();
         public boolean running;
         /** Detect each photo's ICC profile and convert it into the LUT target space. */
@@ -75,7 +77,7 @@ public final class Store {
             AutoCfg a = new AutoCfg();
             a.inTree = inTree;
             a.outTree = outTree;
-            a.lutId = lutId;
+            a.lutIds = new ArrayList<String>(lutIds);
             a.adj = adj.copy();
             a.running = running;
             a.convertSpace = convertSpace;
@@ -84,6 +86,30 @@ public final class Store {
             a.deleteSource = deleteSource;
             return a;
         }
+    }
+
+    private static void readIds(JSONArray arr, List<String> out) {
+        if (arr == null) {
+            return;
+        }
+        for (int i = 0; i < arr.length(); i++) {
+            String id = arr.optString(i, "");
+            if (id.length() > 0 && !out.contains(id)) {
+                out.add(id);
+            }
+        }
+    }
+
+    private static JSONArray idsJson(List<String> ids) {
+        JSONArray arr = new JSONArray();
+        if (ids != null) {
+            for (String id : ids) {
+                if (id != null && id.length() > 0) {
+                    arr.put(id);
+                }
+            }
+        }
+        return arr;
     }
 
     public static ArrayList<ImageEntry> images(Context c) {
@@ -95,7 +121,12 @@ public final class Store {
                 ImageEntry e = new ImageEntry();
                 e.uri = o.optString("uri", "");
                 e.name = o.optString("name", "image");
-                e.lutId = o.optString("lut", "");
+                readIds(o.optJSONArray("luts"), e.lutIds);
+                // 1.3.0 migration: a single applied LUT used to live in "lut".
+                String legacy = o.optString("lut", "");
+                if (e.lutIds.isEmpty() && legacy.length() > 0) {
+                    e.lutIds.add(legacy);
+                }
                 e.adj = Adjust.decode(o.optString("adj", ""));
                 if (e.uri.length() > 0) {
                     list.add(e);
@@ -113,7 +144,7 @@ public final class Store {
                 JSONObject o = new JSONObject();
                 o.put("uri", e.uri);
                 o.put("name", e.name);
-                o.put("lut", e.lutId == null ? "" : e.lutId);
+                o.put("luts", idsJson(e.lutIds));
                 o.put("adj", e.adj == null ? "" : e.adj.encode());
                 arr.put(o);
             }
@@ -171,7 +202,14 @@ public final class Store {
         AutoCfg cfg = new AutoCfg();
         cfg.inTree = p.getString("auto_in", "");
         cfg.outTree = p.getString("auto_out", "");
-        cfg.lutId = p.getString("auto_lut", "");
+        try {
+            readIds(new JSONArray(p.getString("auto_luts", "[]")), cfg.lutIds);
+        } catch (Exception ignored) {
+        }
+        String legacy = p.getString("auto_lut", "");
+        if (cfg.lutIds.isEmpty() && legacy != null && legacy.length() > 0) {
+            cfg.lutIds.add(legacy);
+        }
         cfg.adj = Adjust.decode(p.getString("auto_adj", ""));
         cfg.running = p.getBoolean("auto_running", false);
         cfg.convertSpace = p.getBoolean("auto_space", true);
@@ -185,7 +223,7 @@ public final class Store {
         sp(c).edit()
                 .putString("auto_in", cfg.inTree)
                 .putString("auto_out", cfg.outTree)
-                .putString("auto_lut", cfg.lutId)
+                .putString("auto_luts", idsJson(cfg.lutIds).toString())
                 .putString("auto_adj", cfg.adj.encode())
                 .putBoolean("auto_running", cfg.running)
                 .putBoolean("auto_space", cfg.convertSpace)

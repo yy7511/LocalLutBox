@@ -16,11 +16,17 @@ DEX="$OUT/dex"
 APK_LINKED="$OUT/app-linked.apk"
 APK_OPT="$OUT/app-opt.apk"
 APK_ALIGNED="$OUT/app-aligned.apk"
-APK_FINAL="$ROOT/LocalLutBox-1.2.1.apk"
-VERSION_CODE=13
-VERSION_NAME=1.2.1
+APK_FINAL="$ROOT/LocalLutBox-1.3.0.apk"
+VERSION_CODE=14
+VERSION_NAME=1.3.0
 # Signing key lives outside the repository on purpose (public repo).
 KS=${KS:-$HOME/.lutbox/locallutbox.keystore}
+KEY_BACKUP="$ROOT/../.lutbox/locallutbox.keystore"
+# Reuse the workspace-side copy when the home key is missing (sandbox resets),
+# and keep a backup outside the repo so later builds stay upgrade-compatible.
+if [ ! -f "$KS" ] && [ -f "$KEY_BACKUP" ]; then
+  KS="$KEY_BACKUP"
+fi
 KS_PASS=${KS_PASS:-lutroom}
 KEY_ALIAS=${KEY_ALIAS:-locallutbox}
 
@@ -88,6 +94,10 @@ if [ ! -f "$KS" ]; then
   keytool -genkeypair -keystore "$KS" -alias "$KEY_ALIAS" -keyalg RSA -keysize 2048 \
     -validity 10000 -storepass "$KS_PASS" -keypass "$KS_PASS" \
     -dname "CN=LocalLutBox, OU=Mobile, O=yy7511, L=Shanghai, ST=Shanghai, C=CN" >/dev/null 2>&1
+fi
+if [ ! -f "$KEY_BACKUP" ] && [ "$KS" != "$KEY_BACKUP" ]; then
+  mkdir -p "$(dirname "$KEY_BACKUP")"
+  cp "$KS" "$KEY_BACKUP"
 fi
 "$BT/apksigner" sign --ks "$KS" --ks-key-alias "$KEY_ALIAS" \
   --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" \

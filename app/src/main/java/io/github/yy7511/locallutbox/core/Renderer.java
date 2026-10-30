@@ -17,6 +17,11 @@ public final class Renderer {
      *                 taken from {@link Lut#space}, output is always sRGB.
      */
     public static Bitmap render(Bitmap src, Lut lut, Adjust adj, int maxDim, int srcSpace) {
+        return render(src, lut == null ? new Lut[0] : new Lut[]{lut}, adj, maxDim, srcSpace);
+    }
+
+    /** @param luts stacked LUTs, bottom layer first (null entries are skipped). */
+    public static Bitmap render(Bitmap src, Lut[] luts, Adjust adj, int maxDim, int srcSpace) {
         if (src == null || src.isRecycled()) {
             return null;
         }
@@ -32,9 +37,18 @@ public final class Renderer {
         int h = work.getHeight();
         int[] px = new int[w * h];
         work.getPixels(px, 0, w, 0, 0, w, h);
-        int dstSpace = lut == null ? ColorSpace.SRGB : ColorSpace.clampSpace(lut.space);
-        if (lut != null || adj == null || !adj.isNeutral() || ColorSpace.clampSpace(srcSpace) != dstSpace) {
-            Pipeline.apply(px, w, h, adj == null ? new Adjust() : adj, lut, srcSpace);
+        Lut first = null;
+        if (luts != null) {
+            for (Lut l : luts) {
+                if (l != null) {
+                    first = l;
+                    break;
+                }
+            }
+        }
+        int dstSpace = first == null ? ColorSpace.SRGB : ColorSpace.clampSpace(first.space);
+        if (first != null || adj == null || !adj.isNeutral() || ColorSpace.clampSpace(srcSpace) != dstSpace) {
+            Pipeline.apply(px, w, h, adj == null ? new Adjust() : adj, luts, srcSpace);
         }
         Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         out.setPixels(px, 0, w, 0, 0, w, h);

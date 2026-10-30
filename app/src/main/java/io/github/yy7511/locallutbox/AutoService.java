@@ -209,7 +209,7 @@ public class AutoService extends Service {
                 Store.setSeedTree(this, cfg.inTree);
             }
 
-            Lut lut = cfg.lutId == null || cfg.lutId.length() == 0 ? null : LutManager.load(this, cfg.lutId);
+            Lut[] luts = LutManager.loadAll(this, cfg.lutIds);
             int done = 0;
             int failed = 0;
             for (int i = 0; i < docs.size() && done + failed < 300; i++) {
@@ -221,7 +221,7 @@ public class AutoService extends Service {
                 if (processed.contains(k)) {
                     continue;
                 }
-                boolean ok = processDoc(cfg, doc, lut);
+                boolean ok = processDoc(cfg, doc, luts);
                 processed.add(k);
                 Store.saveProcessed(this, processed);
                 if (ok) {
@@ -242,7 +242,7 @@ public class AutoService extends Service {
         }
     }
 
-    private boolean processDoc(Store.AutoCfg cfg, ImageUtil.Doc doc, Lut lut) {
+    private boolean processDoc(Store.AutoCfg cfg, ImageUtil.Doc doc, Lut[] luts) {
         String outName = ImageUtil.baseName(doc.name) + "_LUT.jpg";
         Bitmap src = null;
         Bitmap out = null;
@@ -253,7 +253,7 @@ public class AutoService extends Service {
             int space = cfg.convertSpace ? ColorProfile.detect(getContentResolver(), docUri) : ColorSpace.SRGB;
             try {
                 src = ImageUtil.decodeUri(getContentResolver(), docUri, maxDim);
-                out = Renderer.render(src, lut, cfg.adj, maxDim, space);
+                out = Renderer.render(src, luts, cfg.adj, maxDim, space);
             } catch (OutOfMemoryError oom) {
                 if (src != null) {
                     src.recycle();
@@ -263,7 +263,7 @@ public class AutoService extends Service {
                 reduced = true;
                 maxDim = 3000;
                 src = ImageUtil.decodeUri(getContentResolver(), docUri, maxDim);
-                out = Renderer.render(src, lut, cfg.adj, maxDim, space);
+                out = Renderer.render(src, luts, cfg.adj, maxDim, space);
             }
             if (out == null) {
                 throw new IOException("渲染失败");
@@ -286,7 +286,7 @@ public class AutoService extends Service {
             }
             String spaceNote = "";
             if (cfg.convertSpace) {
-                int target = lut == null ? ColorSpace.SRGB : ColorSpace.clampSpace(lut.space);
+                int target = luts.length == 0 ? ColorSpace.SRGB : ColorSpace.clampSpace(luts[0].space);
                 if (space != target) {
                     spaceNote = "（" + ColorSpace.name(space) + " → " + ColorSpace.name(target)
                             + " → sRGB）";

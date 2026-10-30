@@ -28,6 +28,7 @@ import io.github.yy7511.locallutbox.core.Lut;
 import io.github.yy7511.locallutbox.core.LutManager;
 import io.github.yy7511.locallutbox.core.Store;
 import io.github.yy7511.locallutbox.ui.LutDetail;
+import io.github.yy7511.locallutbox.ui.LutPicker;
 import io.github.yy7511.locallutbox.ui.Ui;
 
 import java.util.ArrayList;
@@ -277,24 +278,17 @@ public class AutoActivity extends BaseActivity {
     }
 
     private void pickLut() {
-        final ArrayList<Store.LutEntry> luts = Store.luts(this);
-        final String[] labels = new String[luts.size() + 1];
-        labels[0] = "无 LUT（仅用参数调色）";
-        for (int i = 0; i < luts.size(); i++) {
-            labels[i + 1] = luts.get(i).name + "（" + ColorSpace.name(luts.get(i).space) + "）";
-        }
-        new AlertDialog.Builder(this)
-                .setTitle("选择固定 LUT")
-                .setItems(labels, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        cfg.lutId = which == 0 ? "" : luts.get(which - 1).id;
-                        Store.saveAuto(AutoActivity.this, cfg);
-                        syncUi();
-                    }
-                })
-                .setNegativeButton("取消", null)
-                .show();
+        LutPicker.show(this, cfg.lutIds, new LutPicker.Callback() {
+            @Override
+            public void onPick(ArrayList<String> ids) {
+                cfg.lutIds = ids;
+                Store.saveAuto(AutoActivity.this, cfg);
+                syncUi();
+                Ui.toast(AutoActivity.this, ids.isEmpty()
+                        ? "已清空固定 LUT，仅用基础参数调色"
+                        : "已选择 " + ids.size() + " 个 LUT，按顺序叠加");
+            }
+        });
     }
 
     private void toggleService() {
@@ -417,18 +411,44 @@ public class AutoActivity extends BaseActivity {
                             previewBase.recycle();
                         }
                         previewBase = fb;
-                        Store.LutEntry lutEntry = cfg.lutId.length() == 0
-                                ? null : LutManager.find(AutoActivity.this, cfg.lutId);
-                        Lut lut = lutEntry == null ? null : LutManager.load(AutoActivity.this, lutEntry.id);
-                        LutDetail.showPreview(AutoActivity.this, fn,
-                                lutEntry == null ? "无 LUT · 仅基础参数"
-                                        : lutEntry.name + " · 目标空间 " + ColorSpace.name(lutEntry.space),
-                                adjustSummary(), lut, previewBase, cfg.adj, null,
+                        Lut[] luts = LutManager.loadAll(AutoActivity.this, cfg.lutIds);
+                        LutDetail.showStack(AutoActivity.this, fn,
+                                luts.length == 0
+                                        ? "无 LUT · 仅基础参数"
+                                        : "叠加 " + luts.length + " 层：" + stackNames(),
+                                adjustSummary(), luts, previewBase, cfg.adj, null,
                                 "文件夹第一张图片", fsp);
                     }
                 });
             }
         }).start();
+    }
+
+    /** “A → B” names of the fixed stack, in application order. */
+    private String stackNames() {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < cfg.lutIds.size(); i++) {
+            Store.LutEntry e = LutManager.find(this, cfg.lutIds.get(i));
+            if (i > 0) {
+                sb.append(" → ");
+            }
+            sb.append(e == null ? "?" : e.name);
+        }
+        return sb.toString();
+    }
+
+    /** Drops ids whose LUT was deleted from the library. */
+    private void pruneLuts() {
+        boolean changed = false;
+        for (int i = cfg.lutIds.size() - 1; i >= 0; i--) {
+            if (LutManager.find(this, cfg.lutIds.get(i)) == null) {
+                cfg.lutIds.remove(i);
+                changed = true;
+            }
+        }
+        if (changed) {
+            Store.saveAuto(this, cfg);
+        }
     }
 
     private String adjustSummary() {
@@ -622,22 +642,10 @@ public class AutoActivity extends BaseActivity {
         outPath.setText(cfg.outTree.length() == 0
                 ? "未选择 · 输出到输入文件夹，文件名加 _LUT"
                 : ImageUtil.treeLabel(cfg.outTree));
-        if (cfg.lutId.length() == 0) {
-            autoLutName.setText("无 LUT");
-        } else {
-            Store.LutEntry found = null;
-            for (Store.LutEntry e : Store.luts(this)) {
-                if (e.id.equals(cfg.lutId)) {
-                    found = e;
-                    break;
-                }
-            }
-            autoLutName.setText(found == null ? "LUT 已移除" : found.name);
-            if (found == null) {
-                cfg.lutId = "";
-                Store.saveAuto(this, cfg);
-            }
-        }
+        pruneLuts();
+        autoLutName.setText(cfg.lutIds.isEmpty()
+                ? "无 LUT · 点击选择（可叠加）"
+                : "叠加 " + cfg.lutIds.size() + " 层 · " + stackNames());
         boolean running = Store.autoRunning(this);
         btnSpace.setText(cfg.convertSpace ? "自动色彩空间转换：开" : "自动色彩空间转换：关");
         btnSpace.setTextColor(cfg.convertSpace ? Ui.ACCENT : Ui.MUTED);

@@ -78,6 +78,15 @@ public final class LutDetail {
                                    final String params, final Lut lut, final Bitmap base,
                                    final Adjust adj, final Runnable onApply, String sourceNote,
                                    final int srcSpace) {
+        showStack(a, title, meta, params, lut == null ? new Lut[0] : new Lut[]{lut}, base, adj,
+                onApply, sourceNote, srcSpace);
+    }
+
+    /** Renders a whole LUT stack (bottom layer first) over the base bitmap. */
+    public static void showStack(final Activity a, final String title, final String meta,
+                                 final String params, final Lut[] luts, final Bitmap base,
+                                 final Adjust adj, final Runnable onApply, String sourceNote,
+                                 final int srcSpace) {
         final Dialog dialog = new Dialog(a, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         FrameLayout root = new FrameLayout(a);
@@ -179,7 +188,7 @@ public final class LutDetail {
                 public void run() {
                     Bitmap result = null;
                     try {
-                        result = Renderer.render(base, lut, adj == null ? new Adjust() : adj, MAX_DIM, srcSpace);
+                        result = Renderer.render(base, luts, adj == null ? new Adjust() : adj, MAX_DIM, srcSpace);
                     } catch (Throwable ignored) {
                         // source can be recycled while the dialog is closing
                     }

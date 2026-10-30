@@ -17,6 +17,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
@@ -49,7 +50,7 @@ public class EditorActivity extends BaseActivity {
     private Store.ImageEntry entry;
     private Bitmap original;
     private Bitmap rendered;
-    private Lut lut;
+    private Lut[] luts = new Lut[0];
     private Adjust adj;
     private int srcSpace = ColorSpace.SRGB;
     private boolean syncing;
@@ -71,6 +72,7 @@ public class EditorActivity extends BaseActivity {
     private LinearLayout paneLut;
     private TextView tabAdjust;
     private TextView tabLut;
+    private TextView lutHint;
 
     private HistogramView histogram;
     private VectorscopeView vectorscope;
@@ -119,6 +121,7 @@ public class EditorActivity extends BaseActivity {
         paneLut = (LinearLayout) findViewById(R.id.paneLut);
         tabAdjust = (TextView) findViewById(R.id.tabAdjust);
         tabLut = (TextView) findViewById(R.id.tabLut);
+        lutHint = (TextView) findViewById(R.id.lutHint);
         analysisStrip = findViewById(R.id.analysisStrip);
         btnGraph = (TextView) findViewById(R.id.btnGraph);
         btnLutSize = (TextView) findViewById(R.id.btnLutSize);
@@ -373,7 +376,7 @@ public class EditorActivity extends BaseActivity {
         LutDetail.show(this, e, original, adj, new Runnable() {
             @Override
             public void run() {
-                selectLut(lutId);
+                addLut(lutId);
             }
         }, "当前照片 + 当前参数");
     }
@@ -390,10 +393,7 @@ public class EditorActivity extends BaseActivity {
         adj = entry.adj;
         title.setText(entry.name);
         pageInfo.setText((index + 1) + " / " + entries.size());
-        lut = entry.lutId == null || entry.lutId.length() == 0 ? null : LutManager.load(this, entry.lutId);
-        if (lut == null) {
-            entry.lutId = "";
-        }
+        loadLutStack();
         syncSliders();
         buildLutChips();
         imgPreview.setImageDrawable(null);
@@ -439,6 +439,35 @@ public class EditorActivity extends BaseActivity {
                 });
             }
         });
+    }
+
+    /** Loads the applied LUTs in order and drops ids that were deleted from the library. */
+    private void loadLutStack() {
+        if (entry.lutIds == null) {
+            entry.lutIds = new ArrayList<String>();
+        }
+        for (int i = entry.lutIds.size() - 1; i >= 0; i--) {
+            if (LutManager.find(this, entry.lutIds.get(i)) == null) {
+                entry.lutIds.remove(i);
+            }
+        }
+        luts = LutManager.loadAll(this, entry.lutIds);
+    }
+
+    /** “A → B（2 层）” summary used in the LUT pane. */
+    private String stackLabel() {
+        if (entry.lutIds == null || entry.lutIds.isEmpty()) {
+            return "当前未叠加 LUT";
+        }
+        StringBuilder sb = new StringBuilder("叠加 ").append(entry.lutIds.size()).append(" 层：");
+        for (int i = 0; i < entry.lutIds.size(); i++) {
+            Store.LutEntry e = LutManager.find(this, entry.lutIds.get(i));
+            if (i > 0) {
+                sb.append(" → ");
+            }
+            sb.append(e == null ? "?" : e.name);
+        }
+        return sb.toString();
     }
 
     private void syncSliders() {
@@ -535,7 +564,7 @@ public class EditorActivity extends BaseActivity {
         }
         final int token = ++renderToken;
         final Adjust a = adj.copy();
-        final Lut l = lut;
+        final Lut[] ls = luts;
         progressTag.setVisibility(View.VISIBLE);
         pool.execute(new Runnable() {
             @Override
@@ -547,7 +576,7 @@ public class EditorActivity extends BaseActivity {
                 int[] vg = new int[Analysis.VEC_N * Analysis.VEC_N];
                 int[] vb = new int[Analysis.VEC_N * Analysis.VEC_N];
                 try {
-                    out = Renderer.render(src, l, a, 1400, srcSpace);
+                    out = Renderer.render(src, ls, a, 1400, srcSpace);
                     if (out != null) {
                         Analysis.compute(out, 220, h, vc, vr, vg, vb);
                     }
@@ -583,6 +612,7 @@ public class EditorActivity extends BaseActivity {
 
     private void buildLutChips() {
         lutChips.removeAllViews();
+        lutHint.setText(stackLabel());
         addLutChip("原图", "");
         ArrayList<Store.LutEntry> luts = Store.luts(this);
         for (int i = 0; i < luts.size(); i++) {
@@ -598,7 +628,9 @@ public class EditorActivity extends BaseActivity {
     }
 
     private void addLutChip(String name, final String lutId) {
-        boolean selected = entry.lutId == null ? lutId.length() == 0 : entry.lutId.equals(lutId);
+        int order = lutId.length() == 0 ? (entry.lutIds.isEmpty() ? 1 : 0)
+                : entry.lutIds.indexOf(lutId) + 1;
+        boolean selected = lutId.length() == 0 ? entry.lutIds.isEmpty() : order > 0;
         LinearLayout chip = new LinearLayout(this);
         chip.setOrientation(LinearLayout.VERTICAL);
         chip.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -613,7 +645,18 @@ public class EditorActivity extends BaseActivity {
         final ImageView iv = new ImageView(this);
         iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
         iv.setBackgroundResource(R.drawable.bg_thumb);
-        chip.addView(iv, new LinearLayout.LayoutParams(thumb, thumb));
+        FrameLayout holder = new FrameLayout(this);
+        holder.addView(iv, new FrameLayout.LayoutParams(thumb, thumb));
+        chip.addView(holder, new LinearLayout.LayoutParams(thumb, thumb));
+        if (lutId.length() > 0 && order > 0) {
+            TextView badge = Ui.text(this, String.valueOf(order), 10, Ui.ON_ACCENT);
+            badge.setGravity(Gravity.CENTER);
+            badge.setBackgroundResource(R.drawable.bg_accent_badge);
+            FrameLayout.LayoutParams blp = new FrameLayout.LayoutParams(
+                    Ui.dp(this, 16), Ui.dp(this, 16), Gravity.TOP | Gravity.LEFT);
+            blp.setMargins(Ui.dp(this, 3), Ui.dp(this, 3), 0, 0);
+            holder.addView(badge, blp);
+        }
 
         TextView tv = Ui.text(this, name, 9, selected ? Ui.ACCENT : Ui.TEXT);
         tv.setMaxLines(1);
@@ -633,10 +676,7 @@ public class EditorActivity extends BaseActivity {
         chip.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                selectLut(lutId);
-                if (lutId.length() > 0) {
-                    Ui.toast(EditorActivity.this, "已套用");
-                }
+                toggleLut(lutId);
             }
         });
         chip.setOnLongClickListener(new View.OnLongClickListener() {
@@ -762,12 +802,41 @@ public class EditorActivity extends BaseActivity {
         lutChips.addView(chip);
     }
 
-    private void selectLut(String id) {
-        entry.lutId = id;
-        Store.setLastLutId(this, id);
-        lut = id.length() == 0 ? null : LutManager.load(this, id);
+    /** Short press: adds the LUT on top of the stack, or removes it if it is already applied. */
+    private void toggleLut(String id) {
+        if (id.length() == 0) {
+            entry.lutIds.clear();
+            Store.setLastLutId(this, "");
+            loadLutStack();
+            buildLutChips();
+            scheduleRender();
+            Ui.toast(this, "已清空叠加，恢复原图");
+            return;
+        }
+        if (entry.lutIds.contains(id)) {
+            entry.lutIds.remove(id);
+            Ui.toast(this, "已移除该 LUT");
+        } else {
+            entry.lutIds.add(id);
+            Store.setLastLutId(this, id);
+            Ui.toast(this, "已叠加第 " + entry.lutIds.size() + " 层");
+        }
+        loadLutStack();
         buildLutChips();
         scheduleRender();
+    }
+
+    private void addLut(String id) {
+        if (entry.lutIds.contains(id)) {
+            Ui.toast(this, "此 LUT 已在叠加中");
+            return;
+        }
+        entry.lutIds.add(id);
+        Store.setLastLutId(this, id);
+        loadLutStack();
+        buildLutChips();
+        scheduleRender();
+        Ui.toast(this, "已叠加第 " + entry.lutIds.size() + " 层");
     }
 
     private void go(int delta) {
@@ -806,6 +875,8 @@ public class EditorActivity extends BaseActivity {
 
     private void doSave(final boolean toFolder) {
         final String name = ImageUtil.baseName(entry.name) + "_LUT.jpg";
+        final Lut[] stack = luts;
+        final Adjust savedAdj = adj.copy();
         final ProgressDialog pd = new ProgressDialog(this);
         pd.setMessage("正在导出…");
         pd.setCancelable(false);
@@ -823,7 +894,7 @@ public class EditorActivity extends BaseActivity {
                 try {
                     try {
                         full = ImageUtil.decodeUri(getContentResolver(), Uri.parse(entry.uri), 0);
-                        out = Renderer.render(full, lut, adj.copy(), 0, srcSpace);
+                        out = Renderer.render(full, stack, savedAdj, 0, srcSpace);
                     } catch (OutOfMemoryError oom) {
                         if (full != null) {
                             full.recycle();
@@ -832,7 +903,7 @@ public class EditorActivity extends BaseActivity {
                         out = null;
                         reduced = true;
                         full = ImageUtil.decodeUri(getContentResolver(), Uri.parse(entry.uri), 4096);
-                        out = Renderer.render(full, lut, adj.copy(), 4096, srcSpace);
+                        out = Renderer.render(full, stack, savedAdj, 4096, srcSpace);
                     }
                     if (out == null) {
                         throw new Exception("渲染失败");
@@ -877,9 +948,9 @@ public class EditorActivity extends BaseActivity {
     protected void onResume() {
         super.onResume();
         if (loadedOnce && entry != null) {
-            lut = entry.lutId == null || entry.lutId.length() == 0 ? null : LutManager.load(this, entry.lutId);
-            if (lut == null && entry.lutId != null && entry.lutId.length() > 0) {
-                entry.lutId = "";
+            int before = luts.length;
+            loadLutStack();
+            if (luts.length != before) {
                 scheduleRender();
             }
             buildLutChips();

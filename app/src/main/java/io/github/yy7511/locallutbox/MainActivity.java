@@ -230,9 +230,9 @@ public class MainActivity extends BaseActivity {
             TextView name = (TextView) view.findViewById(R.id.thumbName);
             TextView badge = (TextView) view.findViewById(R.id.thumbBadge);
             name.setText(e.name);
-            boolean hasLut = e.lutId != null && e.lutId.length() > 0;
-            badge.setVisibility(hasLut ? View.VISIBLE : View.GONE);
-            badge.setText("LUT");
+            int layers = e.lutIds == null ? 0 : e.lutIds.size();
+            badge.setVisibility(layers > 0 ? View.VISIBLE : View.GONE);
+            badge.setText(layers > 1 ? "LUT×" + layers : "LUT");
             ThumbLoader.load(thumb, e.uri, 110);
             return view;
         }

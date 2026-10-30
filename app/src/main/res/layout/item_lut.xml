@@ -18,6 +18,19 @@
             android:contentDescription="LUT 预览" />
 
         <TextView
+            android:id="@+id/lutOrder"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="top|left"
+            android:layout_margin="5dp"
+            android:background="@drawable/bg_accent_badge"
+            android:gravity="center"
+            android:text="1"
+            android:textColor="@color/on_accent"
+            android:textSize="10sp"
+            android:visibility="gone" />
+
+        <TextView
             android:id="@+id/lutKind"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

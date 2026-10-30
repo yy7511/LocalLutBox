@@ -112,23 +112,65 @@ public final class Pipeline {
         apply(px, w, h, adj, lut, ColorSpace.SRGB);
     }
 
-    /**
-     * @param srcSpace colour space of the incoming pixels; converted into the LUT's
-     *                 target space before grading, then back to sRGB for output.
-     */
     public static void apply(int[] px, int w, int h, Adjust adj, Lut lut, int srcSpace) {
+        apply(px, w, h, adj, lut == null ? new Lut[0] : new Lut[]{lut}, srcSpace);
+    }
+
+    /**
+     * Applies the adjustments once, then every LUT in order (each one converting
+     * into its own target space first), finally back to sRGB plus clarity.
+     *
+     * @param luts     stacked LUTs, bottom layer first; null entries are skipped
+     * @param srcSpace colour space of the incoming pixels
+     */
+    public static void apply(int[] px, int w, int h, Adjust adj, Lut[] luts, int srcSpace) {
         if (px == null || w <= 0 || h <= 0) {
             return;
         }
-        int dstSpace = lut == null ? ColorSpace.SRGB : ColorSpace.clampSpace(lut.space);
+        Lut first = null;
+        if (luts != null) {
+            for (Lut l : luts) {
+                if (l != null) {
+                    first = l;
+                    break;
+                }
+            }
+        }
+        int dstSpace = first == null ? ColorSpace.SRGB : ColorSpace.clampSpace(first.space);
         boolean sameSpace = ColorSpace.clampSpace(srcSpace) == dstSpace;
-        if (sameSpace && adj.isNeutral() && lut == null) {
+        if (sameSpace && adj.isNeutral() && first == null) {
             return;
         }
         if (!sameSpace) {
             ColorSpace.convert(px, srcSpace, dstSpace);
         }
-        ToneParams tp = new ToneParams(adj, lut);
+        if (!adj.isNeutral()) {
+            runRows(px, w, h, new ToneParams(adj, null));
+        }
+        int curSpace = dstSpace;
+        if (luts != null) {
+            for (Lut l : luts) {
+                if (l == null) {
+                    continue;
+                }
+                int sp = ColorSpace.clampSpace(l.space);
+                if (sp != curSpace) {
+                    ColorSpace.convert(px, curSpace, sp);
+                    curSpace = sp;
+                }
+                runRows(px, w, h, new ToneParams(new Adjust(), l));
+            }
+        }
+        if (curSpace != ColorSpace.SRGB) {
+            ColorSpace.convert(px, curSpace, ColorSpace.SRGB);
+        }
+        if (Math.abs(adj.clarity) > 0.01f) {
+            applyClarity(px, w, h, adj.clarity);
+        }
+    }
+
+    /** Runs {@link #applyRows} over the image, splitting rows across a few threads. */
+    private static void runRows(int[] px, int w, int h, ToneParams tp) {
         int threads = Math.min(4, Math.max(1, Runtime.getRuntime().availableProcessors()));
         if (h < 64 && threads > 1) {
             threads = 1;
@@ -162,12 +204,6 @@ public final class Pipeline {
                     }
                 }
             }
-        }
-        if (dstSpace != ColorSpace.SRGB) {
-            ColorSpace.convert(px, dstSpace, ColorSpace.SRGB);
-        }
-        if (Math.abs(adj.clarity) > 0.01f) {
-            applyClarity(px, w, h, adj.clarity);
         }
     }
 

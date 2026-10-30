@@ -172,6 +172,21 @@ public final class LutManager {
         }
     }
 
+    /** Loads a stack in order, skipping ids that no longer exist. */
+    public static Lut[] loadAll(Context c, java.util.List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return new Lut[0];
+        }
+        ArrayList<Lut> out = new ArrayList<Lut>();
+        for (String id : ids) {
+            Lut lut = load(c, id);
+            if (lut != null) {
+                out.add(lut);
+            }
+        }
+        return out.toArray(new Lut[out.size()]);
+    }
+
     /** Updates the colour space a LUT is authored for and drops its cached thumbnail. */
     public static void setSpace(Context c, String id, int space) {
         ArrayList<Store.LutEntry> entries = Store.luts(c);
