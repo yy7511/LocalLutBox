@@ -55,6 +55,8 @@ public final class Store {
         public String params = "";
         /** Target colour space the LUT maps from/to (see {@link ColorSpace}). */
         public int space = ColorSpace.SRGB;
+        /** Quantized content fingerprint (base64) for duplicate detection. May be empty. */
+        public String fingerprint = "";
     }
 
     public static final class AutoCfg {
@@ -168,6 +170,7 @@ public final class Store {
                 e.label = o.optString("label", "");
                 e.params = o.optString("params", "");
                 e.space = ColorSpace.clampSpace(o.optInt("space", ColorSpace.SRGB));
+                e.fingerprint = o.optString("fp", "");
                 if (e.id.length() > 0) {
                     list.add(e);
                 }
@@ -190,6 +193,7 @@ public final class Store {
                 o.put("label", e.label);
                 o.put("params", e.params);
                 o.put("space", e.space);
+                o.put("fp", e.fingerprint == null ? "" : e.fingerprint);
                 arr.put(o);
             }
         } catch (Exception ignored) {

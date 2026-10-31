@@ -218,4 +218,29 @@ public final class Lut {
     public static float clamp01(float v) {
         return v < 0f ? 0f : (v > 1f ? 1f : v);
     }
+
+    /**
+     * Samples the LUT on a small uniform grid so two LUTs can be compared
+     * regardless of their native grid size or input domain.
+     * Returns {@code side^3 * 3} floats in [0,1] (r,g,b for each grid point).
+     */
+    public float[] fingerprint() {
+        final int side = 5;
+        final int n = side * side * side;
+        float[] out = new float[n * 3];
+        float[] rgb = new float[3];
+        int idx = 0;
+        for (int b = 0; b < side; b++) {
+            for (int g = 0; g < side; g++) {
+                for (int r = 0; r < side; r++) {
+                    sample(rgb, r / (float) (side - 1), g / (float) (side - 1),
+                            b / (float) (side - 1));
+                    out[idx++] = rgb[0];
+                    out[idx++] = rgb[1];
+                    out[idx++] = rgb[2];
+                }
+            }
+        }
+        return out;
+    }
 }

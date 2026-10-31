@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
+import android.util.Base64;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -44,38 +45,59 @@ public final class LutManager {
         return Store.luts(c);
     }
 
-    public static Store.LutEntry importUri(Context c, Uri uri) throws Exception {
+    /** Result of parsing a LUT file: the LUT data plus import-time metadata. */
+    public static final class Parsed {
+        public Lut lut;
+        public String label;
+        public String params;
+    }
+
+    /** A LUT already in the library whose content is close to a new import. */
+    public static final class Match {
+        public Store.LutEntry entry;
+        /** 0..1, 1 = identical. */
+        public float similarity;
+    }
+
+    /** Similarity above this is treated as "content is basically the same". */
+    private static final float SIM_THRESHOLD = 0.90f;
+
+    /** Parses a LUT file but does not store it. */
+    public static Parsed parseUri(Context c, Uri uri) throws Exception {
         String display = ImageUtil.getDisplayName(c.getContentResolver(), uri);
         String ext = ImageUtil.extension(display);
         String text = ImageUtil.readText(c.getContentResolver(), uri, 24 * 1024 * 1024);
 
-        Lut lut;
-        String label;
-        String params = "";
+        Parsed p = new Parsed();
         if ("cube".equals(ext)) {
-            lut = CubeParser.parse(text, display);
-            label = labelOf(lut);
-            params = cubeParams(text, lut);
+            p.lut = CubeParser.parse(text, display);
+            p.label = labelOf(p.lut);
+            p.params = cubeParams(text, p.lut);
         } else if ("xmp".equals(ext)) {
-            lut = XmpParser.bake(text, display);
-            label = "XMP · " + lut.size + "³";
-            params = XmpParser.describe(text);
+            p.lut = XmpParser.bake(text, display);
+            p.label = "XMP · " + p.lut.size + "³";
+            p.params = XmpParser.describe(text);
         } else if ("3dl".equals(ext)) {
-            lut = CubeParser.parse3dl(text, display);
-            label = "3DL · " + lut.size + "³";
-            params = "3DL 蓝快序重映射 · 网格 " + lut.size + "³";
+            p.lut = CubeParser.parse3dl(text, display);
+            p.label = "3DL · " + p.lut.size + "³";
+            p.params = "3DL 蓝快序重映射 · 网格 " + p.lut.size + "³";
         } else {
             try {
-                lut = CubeParser.parse(text, display);
-                label = labelOf(lut);
-                params = cubeParams(text, lut);
+                p.lut = CubeParser.parse(text, display);
+                p.label = labelOf(p.lut);
+                p.params = cubeParams(text, p.lut);
             } catch (Exception e) {
-                lut = XmpParser.bake(text, display);
-                label = "XMP · " + lut.size + "³";
-                params = XmpParser.describe(text);
+                p.lut = XmpParser.bake(text, display);
+                p.label = "XMP · " + p.lut.size + "³";
+                p.params = XmpParser.describe(text);
             }
         }
+        return p;
+    }
 
+    /** Stores a previously parsed LUT. Returns the new library entry. */
+    public static Store.LutEntry importLut(Context c, Uri uri, Parsed p) throws Exception {
+        String display = ImageUtil.getDisplayName(c.getContentResolver(), uri);
         ArrayList<Store.LutEntry> entries = Store.luts(c);
         String base = ImageUtil.baseName(display);
         if (base == null || base.length() == 0) {
@@ -90,19 +112,126 @@ public final class LutManager {
 
         String id = "l" + System.currentTimeMillis() + "_" + (int) (Math.random() * 900 + 100);
         File file = new File(dir(c), id + ".lut");
-        LutCodec.write(lut, file);
+        LutCodec.write(p.lut, file);
 
         Store.LutEntry entry = new Store.LutEntry();
         entry.id = id;
         entry.name = name;
         entry.file = file.getAbsolutePath();
-        entry.kind = lut.kind;
-        entry.size = lut.size;
-        entry.label = label;
-        entry.params = params;
+        entry.kind = p.lut.kind;
+        entry.size = p.lut.size;
+        entry.label = p.label;
+        entry.params = p.params;
+        entry.fingerprint = encodeFingerprint(p.lut.fingerprint());
         entries.add(entry);
         Store.saveLuts(c, entries);
         return entry;
+    }
+
+    /** Convenience: parse + import in one call. */
+    public static Store.LutEntry importUri(Context c, Uri uri) throws Exception {
+        return importLut(c, uri, parseUri(c, uri));
+    }
+
+    /** Returns library entries whose content is similar to the given LUT (best match first). */
+    public static ArrayList<Match> findSimilar(Context c, Lut lut) {
+        ArrayList<Match> out = new ArrayList<Match>();
+        if (lut == null || lut.data == null) {
+            return out;
+        }
+        float[] fp = lut.fingerprint();
+        ArrayList<Store.LutEntry> entries = Store.luts(c);
+        for (Store.LutEntry e : entries) {
+            float[] efp = fingerprintOf(c, e);
+            if (efp == null) {
+                continue;
+            }
+            float sim = similarity(fp, efp);
+            if (sim >= SIM_THRESHOLD) {
+                Match m = new Match();
+                m.entry = e;
+                m.similarity = sim;
+                out.add(m);
+            }
+        }
+        // Sort by similarity descending.
+        for (int i = 1; i < out.size(); i++) {
+            Match key = out.get(i);
+            int j = i - 1;
+            while (j >= 0 && out.get(j).similarity < key.similarity) {
+                out.set(j + 1, out.get(j));
+                j--;
+            }
+            out.set(j + 1, key);
+        }
+        return out;
+    }
+
+    /** Returns the stored fingerprint of an entry, loading & caching it if missing. */
+    private static float[] fingerprintOf(Context c, Store.LutEntry e) {
+        if (e.fingerprint != null && e.fingerprint.length() > 0) {
+            return decodeFingerprint(e.fingerprint);
+        }
+        Lut lut = load(c, e.id);
+        if (lut == null) {
+            return null;
+        }
+        float[] fp = lut.fingerprint();
+        e.fingerprint = encodeFingerprint(fp);
+        // Persist lazily so we don't recompute next time.
+        ArrayList<Store.LutEntry> all = Store.luts(c);
+        for (Store.LutEntry x : all) {
+            if (x.id.equals(e.id)) {
+                x.fingerprint = e.fingerprint;
+                break;
+            }
+        }
+        Store.saveLuts(c, all);
+        return fp;
+    }
+
+    /** Quantizes a [0,1] fingerprint to bytes and base64-encodes it. */
+    private static String encodeFingerprint(float[] fp) {
+        byte[] b = new byte[fp.length];
+        for (int i = 0; i < fp.length; i++) {
+            int v = Math.round(fp[i] * 255f);
+            if (v < 0) v = 0;
+            if (v > 255) v = 255;
+            b[i] = (byte) v;
+        }
+        return Base64.encodeToString(b, Base64.NO_WRAP);
+    }
+
+    private static float[] decodeFingerprint(String s) {
+        if (s == null || s.length() == 0) {
+            return null;
+        }
+        byte[] b;
+        try {
+            b = Base64.decode(s, Base64.NO_WRAP);
+        } catch (Exception ex) {
+            return null;
+        }
+        float[] fp = new float[b.length];
+        for (int i = 0; i < b.length; i++) {
+            fp[i] = (b[i] & 0xff) / 255f;
+        }
+        return fp;
+    }
+
+    /** 1 - normalized RMSE between two fingerprints. Returns 0 if lengths differ. */
+    private static float similarity(float[] a, float[] b) {
+        if (a == null || b == null || a.length != b.length || a.length == 0) {
+            return 0f;
+        }
+        double sum = 0;
+        for (int i = 0; i < a.length; i++) {
+            float d = a[i] - b[i];
+            sum += d * d;
+        }
+        double rmse = Math.sqrt(sum / a.length);
+        float sim = (float) (1.0 - rmse * 4.0);
+        return sim < 0f ? 0f : (sim > 1f ? 1f : sim);
     }
 
     private static String labelOf(Lut lut) {

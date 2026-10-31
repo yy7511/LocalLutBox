@@ -23,6 +23,7 @@ import android.widget.TextView;
 import io.github.yy7511.locallutbox.core.Adjust;
 import io.github.yy7511.locallutbox.core.ColorSpace;
 import io.github.yy7511.locallutbox.core.ImageUtil;
+import io.github.yy7511.locallutbox.core.Lut;
 import io.github.yy7511.locallutbox.core.LutManager;
 import io.github.yy7511.locallutbox.core.Preview;
 import io.github.yy7511.locallutbox.core.Store;
@@ -30,8 +31,11 @@ import io.github.yy7511.locallutbox.ui.LutDetail;
 import io.github.yy7511.locallutbox.ui.Ui;
 
 import java.util.ArrayList;
+import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LutLibraryActivity extends BaseActivity {
 
@@ -244,6 +248,13 @@ public class LutLibraryActivity extends BaseActivity {
         return uris;
     }
 
+    private static final class ImportItem {
+        Uri uri;
+        String display;
+        LutManager.Parsed parsed;
+        ArrayList<LutManager.Match> similar;
+    }
+
     private void importLuts(final ArrayList<Uri> uris) {
         final ProgressDialog pd = new ProgressDialog(this);
         pd.setMessage("正在解析 LUT…");
@@ -255,20 +266,67 @@ public class LutLibraryActivity extends BaseActivity {
         pool.execute(new Runnable() {
             @Override
             public void run() {
-                int ok = 0;
-                StringBuilder errors = new StringBuilder();
+                // 1. Parse everything first so we know which files are valid.
+                final ArrayList<ImportItem> items = new ArrayList<ImportItem>();
+                final StringBuilder errors = new StringBuilder();
                 for (int i = 0; i < uris.size(); i++) {
+                    Uri uri = uris.get(i);
+                    ImportItem it = new ImportItem();
+                    it.uri = uri;
+                    it.display = ImageUtil.getDisplayName(getContentResolver(), uri);
                     try {
-                        LutManager.importUri(LutLibraryActivity.this, uris.get(i));
-                        ok++;
+                        it.parsed = LutManager.parseUri(LutLibraryActivity.this, uri);
                     } catch (Throwable e) {
-                        String n = ImageUtil.getDisplayName(getContentResolver(), uris.get(i));
                         if (errors.length() > 0) {
                             errors.append('\n');
                         }
-                        errors.append(n).append("：").append(e.getMessage());
+                        errors.append(it.display).append("：").append(e.getMessage());
+                        continue;
+                    }
+                    it.similar = LutManager.findSimilar(LutLibraryActivity.this, it.parsed.lut);
+                    items.add(it);
+                }
+
+                // 2. Ask the user about each LUT that has similar content already.
+                final ArrayList<ImportItem> approved = new ArrayList<ImportItem>();
+                for (final ImportItem it : items) {
+                    if (it.similar.isEmpty()) {
+                        approved.add(it);
+                        continue;
+                    }
+                    final AtomicBoolean keep = new AtomicBoolean(false);
+                    final CountDownLatch latch = new CountDownLatch(1);
+                    main.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            showSimilarDialog(it, keep, latch);
+                        }
+                    });
+                    try {
+                        latch.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                    if (keep.get()) {
+                        approved.add(it);
                     }
                 }
+
+                // 3. Import approved LUTs.
+                int ok = 0;
+                for (ImportItem it : approved) {
+                    try {
+                        LutManager.importLut(LutLibraryActivity.this, it.uri, it.parsed);
+                        ok++;
+                    } catch (Throwable e) {
+                        if (errors.length() > 0) {
+                            errors.append('\n');
+                        }
+                        errors.append(it.display).append("：").append(e.getMessage());
+                    }
+                }
+
                 final int fok = ok;
                 final String ferr = errors.toString();
                 main.post(new Runnable() {
@@ -293,6 +351,49 @@ public class LutLibraryActivity extends BaseActivity {
                 });
             }
         });
+    }
+
+    private void showSimilarDialog(final ImportItem it, final AtomicBoolean keep,
+                                   final CountDownLatch latch) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("库中已存在内容相似的 LUT：\n\n");
+        for (int i = 0; i < it.similar.size(); i++) {
+            LutManager.Match m = it.similar.get(i);
+            sb.append("· ").append(m.entry.name)
+                    .append("（相似度 ").append(String.format(Locale.US, "%.0f%%", m.similarity * 100f))
+                    .append("）\n");
+        }
+        sb.append("\n是否仍要导入「").append(it.display).append("」？");
+        try {
+            new AlertDialog.Builder(this)
+                    .setTitle("检测到相似 LUT")
+                    .setMessage(sb.toString())
+                    .setNegativeButton("跳过", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            keep.set(false);
+                            latch.countDown();
+                        }
+                    })
+                    .setPositiveButton("仍要导入", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            keep.set(true);
+                            latch.countDown();
+                        }
+                    })
+                    .setOnCancelListener(new DialogInterface.OnCancelListener() {
+                        @Override
+                        public void onCancel(DialogInterface dialog) {
+                            keep.set(false);
+                            latch.countDown();
+                        }
+                    })
+                    .show();
+        } catch (Exception e) {
+            keep.set(false);
+            latch.countDown();
+        }
     }
 
     private void setPreview(final Uri uri) {
