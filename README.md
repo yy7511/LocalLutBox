@@ -45,7 +45,7 @@
 SDK=/path/to/android-sdk ./build.sh
 ```
 
-流程：`aapt2 compile/link` → `javac --release 8` → `R8`（压缩、优化、混淆）→ `aapt2 optimize`（资源名折叠）→ 打包 dex → `zipalign` → `apksigner`。产物为 `LocalLutBox-<version>.apk`。
+流程：`aapt2 compile/link` → `javac --release 8` → `R8` → `aapt2 optimize` → 打包 dex → `zipalign` → `apksigner`。产物为 `LocalLutBox-<version>.apk`。
 
 - 需要 Android SDK Platform 34 与 Build-Tools（34+）
 - 签名密钥不随仓库分发，构建时读取 `$KS`（默认 `~/.lutbox/locallutbox.keystore`），可用环境变量 `KS` / `KS_PASS` / `KEY_ALIAS` 覆盖
@@ -76,8 +76,6 @@ build.sh                      手工构建脚本
 - 纯 Android Framework API，无 AndroidX、无 GMS、无第三方依赖；Java 8 语法
 - 调色在 `int[]` 上进行，多线程按行并行，三线性插值采样 3D LUT；清晰度用可分离盒式模糊
 - 多层 LUT：先按第一层目标空间转换并应用基础参数，之后逐层转换到各自目标空间再采样，最后统一回 sRGB
-- LUT 缓存以 AES-256-GCM 加密存储，密钥由 APK 签名证书派生，缓存拷出应用沙箱无法读取
-- 发布包经 R8 混淆（类/成员重命名、组件与自定义 View 按规则保留）、资源名折叠、去除调试信息
 - 目录监听使用 SAF + ContentObserver + 6 秒轮询（SAF 目录无法使用 FileObserver）
 
 ## 已知限制
