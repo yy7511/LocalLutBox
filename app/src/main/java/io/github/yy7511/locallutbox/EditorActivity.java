@@ -57,6 +57,23 @@ public class EditorActivity extends BaseActivity {
     private boolean compareHeld;
     private int renderToken;
     private boolean loadedOnce;
+    private boolean applyingHistory;
+
+    private final ArrayList<State> undoStack = new ArrayList<State>();
+    private final ArrayList<State> redoStack = new ArrayList<State>();
+    private TextView btnUndo;
+    private TextView btnRedo;
+
+    /** Snapshot of all editable state for one image. */
+    private static final class State {
+        final Adjust adj;
+        final ArrayList<String> lutIds;
+
+        State(Adjust adj, ArrayList<String> lutIds) {
+            this.adj = adj.copy();
+            this.lutIds = new ArrayList<String>(lutIds);
+        }
+    }
 
     private final ExecutorService pool = Executors.newFixedThreadPool(2);
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -125,6 +142,8 @@ public class EditorActivity extends BaseActivity {
         analysisStrip = findViewById(R.id.analysisStrip);
         btnGraph = (TextView) findViewById(R.id.btnGraph);
         btnLutSize = (TextView) findViewById(R.id.btnLutSize);
+        btnUndo = (TextView) findViewById(R.id.btnUndo);
+        btnRedo = (TextView) findViewById(R.id.btnRedo);
         histogram = (HistogramView) findViewById(R.id.histogram);
         vectorscope = (VectorscopeView) findViewById(R.id.vectorscope);
         editorBar = findViewById(R.id.editorBar);
@@ -163,6 +182,11 @@ public class EditorActivity extends BaseActivity {
             sliders[i] = Ui.addSlider(adjustList, names[i], 200, 100, "0.00");
             final int which = i;
             sliders[i].bar.setOnSeekBarChangeListener(new Ui.SeekAdapter() {
+                @Override
+                public void onStartTrackingTouch(SeekBar seekBar) {
+                    pushHistory();
+                }
+
                 @Override
                 public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                     if (syncing) {
@@ -228,11 +252,24 @@ public class EditorActivity extends BaseActivity {
             @Override
             public void onClick(View v) {
                 if (adj != null) {
+                    pushHistory();
                     adj.reset();
                     syncSliders();
                     scheduleRender();
                     Ui.toast(EditorActivity.this, "参数已重置");
                 }
+            }
+        });
+        btnUndo.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                undo();
+            }
+        });
+        btnRedo.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                redo();
             }
         });
         btnGraph.setOnClickListener(new View.OnClickListener() {
@@ -391,6 +428,9 @@ public class EditorActivity extends BaseActivity {
             entry.adj = new Adjust();
         }
         adj = entry.adj;
+        undoStack.clear();
+        redoStack.clear();
+        updateUndoRedoButtons();
         title.setText(entry.name);
         pageInfo.setText((index + 1) + " / " + entries.size());
         loadLutStack();
@@ -479,6 +519,57 @@ public class EditorActivity extends BaseActivity {
             sliders[i].value.setText(Ui.signed(v));
         }
         syncing = false;
+    }
+
+    /** Captures the current state onto the undo stack; clears the redo stack. */
+    private void pushHistory() {
+        if (applyingHistory || adj == null || entry == null) {
+            return;
+        }
+        undoStack.add(new State(adj, entry.lutIds));
+        redoStack.clear();
+        updateUndoRedoButtons();
+    }
+
+    /** Restores a snapshot: adjustments, LUT stack, sliders and chips. */
+    private void applyState(State s) {
+        applyingHistory = true;
+        try {
+            adj.set(s.adj);
+            entry.lutIds = new ArrayList<String>(s.lutIds);
+            loadLutStack();
+            syncSliders();
+            buildLutChips();
+            scheduleRender();
+        } finally {
+            applyingHistory = false;
+        }
+        updateUndoRedoButtons();
+    }
+
+    private void undo() {
+        if (undoStack.isEmpty()) {
+            return;
+        }
+        redoStack.add(new State(adj, entry.lutIds));
+        State s = undoStack.remove(undoStack.size() - 1);
+        applyState(s);
+    }
+
+    private void redo() {
+        if (redoStack.isEmpty()) {
+            return;
+        }
+        undoStack.add(new State(adj, entry.lutIds));
+        State s = redoStack.remove(redoStack.size() - 1);
+        applyState(s);
+    }
+
+    private void updateUndoRedoButtons() {
+        btnUndo.setEnabled(!undoStack.isEmpty());
+        btnRedo.setEnabled(!redoStack.isEmpty());
+        btnUndo.setTextColor(!undoStack.isEmpty() ? Ui.ACCENT : Ui.MUTED);
+        btnRedo.setTextColor(!redoStack.isEmpty() ? Ui.ACCENT : Ui.MUTED);
     }
 
     private int valueToProgress(int which, float v) {
@@ -804,6 +895,7 @@ public class EditorActivity extends BaseActivity {
 
     /** Short press: adds the LUT on top of the stack, or removes it if it is already applied. */
     private void toggleLut(String id) {
+        pushHistory();
         if (id.length() == 0) {
             entry.lutIds.clear();
             Store.setLastLutId(this, "");
@@ -831,6 +923,7 @@ public class EditorActivity extends BaseActivity {
             Ui.toast(this, "此 LUT 已在叠加中");
             return;
         }
+        pushHistory();
         entry.lutIds.add(id);
         Store.setLastLutId(this, id);
         loadLutStack();
