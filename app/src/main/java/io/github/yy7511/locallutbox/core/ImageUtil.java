@@ -207,6 +207,15 @@ public final class ImageUtil {
         }
     }
 
+    /** Decodes the app-private backup when available, else falls back to the SAF URI. */
+    public static Bitmap decodeEntry(Context c, Store.ImageEntry e, int maxDim) throws IOException {
+        File backup = ImageBackup.existing(e);
+        if (backup != null) {
+            return decodeFile(backup, maxDim);
+        }
+        return decodeUri(c.getContentResolver(), Uri.parse(e.uri), maxDim);
+    }
+
     private static int sampleSize(int w, int h, int maxDim) {
         if (maxDim <= 0) {
             return 1;
@@ -291,7 +300,7 @@ public final class ImageUtil {
     }
 
     public static Uri saveToGallery(Context c, Bitmap bmp, String displayName) throws IOException {
-        return saveToGallery(c, bmp, displayName, 100, null);
+        return saveToGallery(c, bmp, displayName, 100, (Uri) null);
     }
 
     /**
@@ -300,8 +309,19 @@ public final class ImageUtil {
      */
     public static Uri saveToGallery(Context c, Bitmap bmp, String displayName, int quality, Uri exifSource)
             throws IOException {
+        return saveToGallery(c, bmp, displayName, quality,
+                JpegExif.readExif(c.getContentResolver(), exifSource));
+    }
+
+    /** Same as above but reading EXIF from the app-private backup file. */
+    public static Uri saveToGallery(Context c, Bitmap bmp, String displayName, int quality, File exifSource)
+            throws IOException {
+        return saveToGallery(c, bmp, displayName, quality, JpegExif.readExif(exifSource));
+    }
+
+    private static Uri saveToGallery(Context c, Bitmap bmp, String displayName, int quality, byte[] exif)
+            throws IOException {
         ContentResolver cr = c.getContentResolver();
-        byte[] exif = JpegExif.readExif(cr, exifSource);
         if (Build.VERSION.SDK_INT >= 29) {
             ContentValues v = new ContentValues();
             v.put(MediaStore.Images.Media.DISPLAY_NAME, displayName);
@@ -349,11 +369,21 @@ public final class ImageUtil {
 
     public static Uri saveToTree(ContentResolver cr, String treeUri, String displayName, Bitmap bmp)
             throws IOException {
-        return saveToTree(cr, treeUri, displayName, bmp, 100, null);
+        return saveToTree(cr, treeUri, displayName, bmp, 100, (Uri) null);
     }
 
     public static Uri saveToTree(ContentResolver cr, String treeUri, String displayName, Bitmap bmp,
                                  int quality, Uri exifSource) throws IOException {
+        return saveToTree(cr, treeUri, displayName, bmp, quality, JpegExif.readExif(cr, exifSource));
+    }
+
+    public static Uri saveToTree(ContentResolver cr, String treeUri, String displayName, Bitmap bmp,
+                                 int quality, File exifSource) throws IOException {
+        return saveToTree(cr, treeUri, displayName, bmp, quality, JpegExif.readExif(exifSource));
+    }
+
+    private static Uri saveToTree(ContentResolver cr, String treeUri, String displayName, Bitmap bmp,
+                                  int quality, byte[] exif) throws IOException {
         Uri tree = Uri.parse(treeUri);
         String treeId = DocumentsContract.getTreeDocumentId(tree);
         Uri parent = DocumentsContract.buildDocumentUriUsingTree(tree, treeId);
@@ -362,7 +392,6 @@ public final class ImageUtil {
         if (doc == null) {
             throw new IOException("无法写入输出文件夹");
         }
-        byte[] exif = JpegExif.readExif(cr, exifSource);
         OutputStream os = cr.openOutputStream(doc);
         try {
             if (os == null) {

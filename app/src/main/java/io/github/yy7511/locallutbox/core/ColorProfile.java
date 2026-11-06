@@ -4,6 +4,8 @@ import android.content.ContentResolver;
 import android.net.Uri;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
@@ -28,6 +30,31 @@ public final class ColorProfile {
         } catch (Throwable t) {
             return ColorSpace.SRGB;
         }
+        return detectBytes(head);
+    }
+
+    /** Detects the colour space from an app-private backup file. */
+    public static int detect(File file) {
+        if (file == null || !file.isFile()) {
+            return ColorSpace.SRGB;
+        }
+        InputStream in = null;
+        try {
+            in = new FileInputStream(file);
+            return detectBytes(readHead(in));
+        } catch (Throwable t) {
+            return ColorSpace.SRGB;
+        } finally {
+            if (in != null) {
+                try {
+                    in.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }
+    }
+
+    private static int detectBytes(byte[] head) {
         if (head == null || head.length < 16) {
             return ColorSpace.SRGB;
         }
@@ -47,21 +74,25 @@ public final class ColorProfile {
             return null;
         }
         try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream(64 * 1024);
-            byte[] buf = new byte[16 * 1024];
-            int total = 0;
-            int n;
-            while (total < HEAD_BYTES && (n = in.read(buf)) > 0) {
-                out.write(buf, 0, n);
-                total += n;
-            }
-            return out.toByteArray();
+            return readHead(in);
         } finally {
             try {
                 in.close();
             } catch (IOException ignored) {
             }
         }
+    }
+
+    private static byte[] readHead(InputStream in) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream(64 * 1024);
+        byte[] buf = new byte[16 * 1024];
+        int total = 0;
+        int n;
+        while (total < HEAD_BYTES && (n = in.read(buf)) > 0) {
+            out.write(buf, 0, n);
+            total += n;
+        }
+        return out.toByteArray();
     }
 
     private static boolean isPng(byte[] d) {

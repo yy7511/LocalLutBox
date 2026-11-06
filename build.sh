@@ -16,9 +16,9 @@ DEX="$OUT/dex"
 APK_LINKED="$OUT/app-linked.apk"
 APK_OPT="$OUT/app-opt.apk"
 APK_ALIGNED="$OUT/app-aligned.apk"
-APK_FINAL="$ROOT/LocalLutBox-1.4.0.apk"
-VERSION_CODE=18
-VERSION_NAME=1.4.0
+APK_FINAL="$ROOT/LocalLutBox-1.4.1.apk"
+VERSION_CODE=19
+VERSION_NAME=1.4.1
 # Signing key lives outside the repository on purpose (public repo).
 KS=${KS:-$HOME/.lutbox/locallutbox.keystore}
 KEY_BACKUP="$ROOT/../.lutbox/locallutbox.keystore"

@@ -16,6 +16,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import io.github.yy7511.locallutbox.core.ImageBackup;
 import io.github.yy7511.locallutbox.core.ImageUtil;
 import io.github.yy7511.locallutbox.core.Store;
 import io.github.yy7511.locallutbox.ui.ThumbLoader;
@@ -34,6 +35,7 @@ public class MainActivity extends BaseActivity {
     private TextView lutCount;
     private TextView autoState;
     private LinearLayout emptyState;
+    private boolean backingUp;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -109,6 +111,63 @@ public class MainActivity extends BaseActivity {
         autoState.setTextColor(running ? Ui.ACCENT : Ui.MUTED);
         emptyState.setVisibility(entries.isEmpty() ? View.VISIBLE : View.GONE);
         grid.setVisibility(entries.isEmpty() ? View.GONE : View.VISIBLE);
+        ensureBackups();
+    }
+
+    /**
+     * Copies imported photos into app-private storage so they keep working when
+     * the user moves or deletes the original files. Runs in the background.
+     */
+    private void ensureBackups() {
+        if (backingUp) {
+            return;
+        }
+        final ArrayList<Store.ImageEntry> targets = new ArrayList<Store.ImageEntry>();
+        for (int i = 0; i < entries.size(); i++) {
+            if (ImageBackup.existing(entries.get(i)) == null) {
+                targets.add(entries.get(i));
+            }
+        }
+        if (targets.isEmpty()) {
+            return;
+        }
+        backingUp = true;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                boolean changed = false;
+                for (int i = 0; i < targets.size(); i++) {
+                    if (ImageBackup.ensure(MainActivity.this, targets.get(i)) != null) {
+                        changed = true;
+                    }
+                }
+                final boolean fc = changed;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        backingUp = false;
+                        if (!fc) {
+                            return;
+                        }
+                        ArrayList<Store.ImageEntry> list = Store.images(MainActivity.this);
+                        for (int i = 0; i < targets.size(); i++) {
+                            Store.ImageEntry t = targets.get(i);
+                            if (t.file == null || t.file.length() == 0) {
+                                continue;
+                            }
+                            for (int k = 0; k < list.size(); k++) {
+                                if (t.uri.equals(list.get(k).uri)) {
+                                    list.get(k).file = t.file;
+                                    break;
+                                }
+                            }
+                        }
+                        Store.saveImages(MainActivity.this, list);
+                        reload();
+                    }
+                });
+            }
+        }).start();
     }
 
     private void pickImages() {
@@ -158,7 +217,7 @@ public class MainActivity extends BaseActivity {
         }
         Store.saveImages(this, list);
         reload();
-        Ui.toast(this, added > 0 ? "已导入 " + added + " 张图片" : "这些图片已在列表中");
+        Ui.toast(this, added > 0 ? "已导入 " + added + " 张图片，正在备份到内部空间" : "这些图片已在列表中");
     }
 
     private ArrayList<Uri> collectUris(Intent data) {
@@ -184,11 +243,12 @@ public class MainActivity extends BaseActivity {
         final Store.ImageEntry e = entries.get(position);
         new AlertDialog.Builder(this)
                 .setTitle("移除图片")
-                .setMessage("从列表移除「" + e.name + "」？\n原文件不会被删除。")
+                .setMessage("从列表移除「" + e.name + "」？\n应用内的备份副本会一并删除，原文件不受影响。")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("移除", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
+                        ImageBackup.delete(e);
                         ArrayList<Store.ImageEntry> list = Store.images(MainActivity.this);
                         if (position < list.size()) {
                             list.remove(position);
@@ -231,7 +291,7 @@ public class MainActivity extends BaseActivity {
             badge.setVisibility(layers > 0 ? View.VISIBLE : View.GONE);
             badge.setText(layers > 1 ? "LUT×" + layers : "LUT");
             // Show the graded result (adjustments + LUT stack) instead of the raw photo.
-            ThumbLoader.loadGraded(thumb, e.uri, e.adj, e.lutIds, 110);
+            ThumbLoader.loadGraded(thumb, e.uri, e.file, e.adj, e.lutIds, 110);
             return view;
         }
     }

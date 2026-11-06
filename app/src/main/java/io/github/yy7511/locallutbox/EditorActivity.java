@@ -31,6 +31,7 @@ import io.github.yy7511.locallutbox.core.Adjust;
 import io.github.yy7511.locallutbox.core.Analysis;
 import io.github.yy7511.locallutbox.core.ColorProfile;
 import io.github.yy7511.locallutbox.core.ColorSpace;
+import io.github.yy7511.locallutbox.core.ImageBackup;
 import io.github.yy7511.locallutbox.core.ImageUtil;
 import io.github.yy7511.locallutbox.core.Lut;
 import io.github.yy7511.locallutbox.core.LutManager;
@@ -406,7 +407,7 @@ public class EditorActivity extends BaseActivity {
         rendered = null;
 
         final int token = ++renderToken;
-        final String uri = entry.uri;
+        final Store.ImageEntry en = entry;
         progressTag.setVisibility(View.VISIBLE);
         pool.execute(new Runnable() {
             @Override
@@ -415,8 +416,14 @@ public class EditorActivity extends BaseActivity {
                 String err = null;
                 int space = ColorSpace.SRGB;
                 try {
-                    space = ColorProfile.detect(getContentResolver(), Uri.parse(uri));
-                    b = ImageUtil.decodeUri(getContentResolver(), Uri.parse(uri), 1400);
+                    ImageBackup.ensure(EditorActivity.this, en);
+                    java.io.File backup = ImageBackup.existing(en);
+                    if (backup != null) {
+                        space = ColorProfile.detect(backup);
+                    } else {
+                        space = ColorProfile.detect(getContentResolver(), Uri.parse(en.uri));
+                    }
+                    b = ImageUtil.decodeEntry(EditorActivity.this, en, 1400);
                 } catch (Exception e) {
                     err = e.getMessage();
                 }
@@ -429,6 +436,7 @@ public class EditorActivity extends BaseActivity {
                         if (token != renderToken) {
                             return;
                         }
+                        Store.saveImages(EditorActivity.this, entries);
                         if (fb == null) {
                             progressTag.setVisibility(View.GONE);
                             Ui.toast(EditorActivity.this, "图片加载失败：" + fe);
@@ -727,7 +735,7 @@ public class EditorActivity extends BaseActivity {
         chip.addView(tv, tlp);
 
         if (lutId.length() == 0) {
-            ThumbLoader.load(iv, entry.uri, thumb);
+            ThumbLoader.load(iv, entry.uri, entry.file, thumb);
         } else {
             iv.setTag("chipthumb:" + lutId);
         }
@@ -754,14 +762,14 @@ public class EditorActivity extends BaseActivity {
     /** Renders every LUT chip from the photo being edited, so the preview matches the real picture. */
     private void fillChipThumbs() {
         final int token = ++chipToken;
-        final String uri = entry.uri;
+        final Store.ImageEntry en = entry;
         final ArrayList<Store.LutEntry> luts = Store.luts(this);
         pool.execute(new Runnable() {
             @Override
             public void run() {
                 Bitmap source = null;
                 try {
-                    source = ImageUtil.decodeUri(getContentResolver(), Uri.parse(uri), 320);
+                    source = ImageUtil.decodeEntry(EditorActivity.this, en, 320);
                 } catch (Exception ignored) {
                 }
                 Bitmap square = source == null ? null : squareOf(source, 160);
@@ -772,7 +780,7 @@ public class EditorActivity extends BaseActivity {
                     final Store.LutEntry le = luts.get(i);
                     final Bitmap thumb = square == null
                             ? LutManager.thumb(EditorActivity.this, le.id)
-                            : renderChipThumb(uri, square, le.id);
+                            : renderChipThumb(en.uri, square, le.id);
                     if (thumb == null) {
                         continue;
                     }
@@ -1170,6 +1178,7 @@ public class EditorActivity extends BaseActivity {
         entry.version = Math.max(entry.version, o.version);
         Store.saveImages(this, entries);
         final String uriStr = entry.uri;
+        final Store.ImageEntry expEntry = entry;
         final Lut[] stack = luts;
         final Adjust savedAdj = adj.copy();
         final ProgressDialog pd = new ProgressDialog(this);
@@ -1187,8 +1196,9 @@ public class EditorActivity extends BaseActivity {
                 Bitmap out = null;
                 boolean reduced = false;
                 try {
+                    ImageBackup.ensure(EditorActivity.this, expEntry);
                     try {
-                        full = ImageUtil.decodeUri(getContentResolver(), Uri.parse(uriStr), 0);
+                        full = ImageUtil.decodeEntry(EditorActivity.this, expEntry, 0);
                         out = Renderer.render(full, stack, savedAdj, targetLongEdge(o, full), srcSpace);
                     } catch (OutOfMemoryError oom) {
                         if (full != null) {
@@ -1197,7 +1207,7 @@ public class EditorActivity extends BaseActivity {
                         }
                         out = null;
                         reduced = true;
-                        full = ImageUtil.decodeUri(getContentResolver(), Uri.parse(uriStr), 4096);
+                        full = ImageUtil.decodeEntry(EditorActivity.this, expEntry, 4096);
                         int target = targetLongEdge(o, full);
                         if (target <= 0 || target > 4096) {
                             target = 4096;
@@ -1210,16 +1220,25 @@ public class EditorActivity extends BaseActivity {
                     if (o.watermark) {
                         Watermark.draw(out, o.watermarkText, o.watermarkPos, o.watermarkOpacity);
                     }
-                    Uri exifSource = Uri.parse(uriStr);
+                    java.io.File exifFile = ImageBackup.existing(expEntry);
+                    Uri exifUri = Uri.parse(uriStr);
                     String note = reduced ? "（内存不足，已按长边 4096 导出）" : "";
                     String info = "v" + o.version + " · 长边 " + Math.max(out.getWidth(), out.getHeight())
                             + " · 质量 " + o.quality + (o.watermark ? " · 水印" : "");
                     if (o.toFolder) {
                         String tree = Store.auto(EditorActivity.this).outTree;
-                        ImageUtil.saveToTree(getContentResolver(), tree, name, out, o.quality, exifSource);
+                        if (exifFile != null) {
+                            ImageUtil.saveToTree(getContentResolver(), tree, name, out, o.quality, exifFile);
+                        } else {
+                            ImageUtil.saveToTree(getContentResolver(), tree, name, out, o.quality, exifUri);
+                        }
                         msg = "已保存到自动输出文件夹（" + info + " · EXIF 已保留）" + note;
                     } else {
-                        ImageUtil.saveToGallery(EditorActivity.this, out, name, o.quality, exifSource);
+                        if (exifFile != null) {
+                            ImageUtil.saveToGallery(EditorActivity.this, out, name, o.quality, exifFile);
+                        } else {
+                            ImageUtil.saveToGallery(EditorActivity.this, out, name, o.quality, exifUri);
+                        }
                         msg = "已保存到相册 Pictures/LUT暗房（" + info + " · EXIF 已保留）" + note;
                     }
                 } catch (Exception e) {

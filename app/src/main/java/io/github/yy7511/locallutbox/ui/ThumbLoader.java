@@ -15,6 +15,7 @@ import io.github.yy7511.locallutbox.core.Lut;
 import io.github.yy7511.locallutbox.core.LutManager;
 import io.github.yy7511.locallutbox.core.Renderer;
 
+import java.io.File;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -40,13 +41,18 @@ public final class ThumbLoader {
     }
 
     public static void load(final ImageView view, final String uri, final int sizeDp) {
+        load(view, uri, "", sizeDp);
+    }
+
+    /** Prefers the app-private backup file, falling back to the SAF URI. */
+    public static void load(final ImageView view, final String uri, final String file, final int sizeDp) {
         if (uri == null || uri.length() == 0) {
             view.setImageDrawable(null);
             return;
         }
         final Context app = view.getContext().getApplicationContext();
         final int px = Ui.dp(app, sizeDp);
-        final String key = uri + "@" + px;
+        final String key = (file != null && file.length() > 0 ? file : uri) + "@" + px;
         Bitmap cached = CACHE.get(key);
         if (cached != null && !cached.isRecycled()) {
             view.setImageBitmap(cached);
@@ -59,7 +65,7 @@ public final class ThumbLoader {
             public void run() {
                 Bitmap out = null;
                 try {
-                    Bitmap full = ImageUtil.decodeUri(app.getContentResolver(), android.net.Uri.parse(uri), px * 2);
+                    Bitmap full = decodeSource(app, uri, file, px * 2);
                     out = squareThumb(full, px);
                     if (out != null) {
                         CACHE.put(key, out);
@@ -75,19 +81,20 @@ public final class ThumbLoader {
      * Thumbnail of the graded photo (adjustments + LUT stack), so the main grid
      * previews what the editor shows instead of the untouched original.
      */
-    public static void loadGraded(final ImageView view, final String uri, final Adjust adj,
-                                  final List<String> lutIds, final int sizeDp) {
+    public static void loadGraded(final ImageView view, final String uri, final String file,
+                                  final Adjust adj, final List<String> lutIds, final int sizeDp) {
         if (uri == null || uri.length() == 0) {
             view.setImageDrawable(null);
             return;
         }
         if ((lutIds == null || lutIds.isEmpty()) && (adj == null || adj.isNeutral())) {
-            load(view, uri, sizeDp);
+            load(view, uri, file, sizeDp);
             return;
         }
         final Context app = view.getContext().getApplicationContext();
         final int px = Ui.dp(app, sizeDp);
-        final String key = uri + "@" + px + "#" + (adj == null ? "" : adj.encode())
+        final String key = (file != null && file.length() > 0 ? file : uri) + "@" + px + "#"
+                + (adj == null ? "" : adj.encode())
                 + "#" + (lutIds == null ? "" : TextUtils.join(",", lutIds));
         Bitmap cached = CACHE.get(key);
         if (cached != null && !cached.isRecycled()) {
@@ -103,7 +110,7 @@ public final class ThumbLoader {
             public void run() {
                 Bitmap out = null;
                 try {
-                    Bitmap full = ImageUtil.decodeUri(app.getContentResolver(), android.net.Uri.parse(uri), px * 2);
+                    Bitmap full = decodeSource(app, uri, file, px * 2);
                     Bitmap square = squareThumb(full, px);
                     if (square != null) {
                         Lut[] luts = LutManager.loadAll(app, java.util.Arrays.asList(ids));
@@ -123,6 +130,15 @@ public final class ThumbLoader {
                 deliver(view, key, out);
             }
         });
+    }
+
+    /** Decodes from the app-private backup when available, else from the URI. */
+    private static Bitmap decodeSource(Context app, String uri, String file, int maxDim) throws Exception {
+        File backup = file != null && file.length() > 0 ? new File(file) : null;
+        if (backup != null && backup.isFile() && backup.length() > 0) {
+            return ImageUtil.decodeFile(backup, maxDim);
+        }
+        return ImageUtil.decodeUri(app.getContentResolver(), android.net.Uri.parse(uri), maxDim);
     }
 
     /** Center-crops to a square and scales down to {@code px}; recycles the input. */

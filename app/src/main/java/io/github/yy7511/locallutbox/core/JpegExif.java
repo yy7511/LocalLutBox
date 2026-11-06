@@ -5,6 +5,8 @@ import android.graphics.Bitmap;
 import android.net.Uri;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -26,22 +28,10 @@ public final class JpegExif {
         if (cr == null || uri == null) {
             return null;
         }
-        byte[] head = null;
         InputStream in = null;
         try {
             in = cr.openInputStream(uri);
-            if (in == null) {
-                return null;
-            }
-            ByteArrayOutputStream out = new ByteArrayOutputStream(64 * 1024);
-            byte[] buf = new byte[16 * 1024];
-            int total = 0;
-            int n;
-            while (total < HEAD_BYTES && (n = in.read(buf)) > 0) {
-                out.write(buf, 0, n);
-                total += n;
-            }
-            head = out.toByteArray();
+            return readHead(in);
         } catch (Throwable t) {
             return null;
         } finally {
@@ -52,7 +42,42 @@ public final class JpegExif {
                 }
             }
         }
-        return extract(head);
+    }
+
+    /** Reads EXIF from an app-private backup file. */
+    public static byte[] readExif(File file) {
+        if (file == null || !file.isFile()) {
+            return null;
+        }
+        InputStream in = null;
+        try {
+            in = new FileInputStream(file);
+            return readHead(in);
+        } catch (Throwable t) {
+            return null;
+        } finally {
+            if (in != null) {
+                try {
+                    in.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }
+    }
+
+    private static byte[] readHead(InputStream in) throws IOException {
+        if (in == null) {
+            return null;
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream(64 * 1024);
+        byte[] buf = new byte[16 * 1024];
+        int total = 0;
+        int n;
+        while (total < HEAD_BYTES && (n = in.read(buf)) > 0) {
+            out.write(buf, 0, n);
+            total += n;
+        }
+        return extract(out.toByteArray());
     }
 
     static byte[] extract(byte[] d) {

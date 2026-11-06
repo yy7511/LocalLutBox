@@ -31,6 +31,8 @@ public final class Store {
     public static final class ImageEntry {
         public String uri;
         public String name;
+        /** App-private backup copy of the source photo; empty until the copy succeeds. */
+        public String file = "";
         /** Applied LUTs, bottom layer first. Empty = straight to the source photo. */
         public ArrayList<String> lutIds = new ArrayList<String>();
         public Adjust adj = new Adjust();
@@ -125,6 +127,7 @@ public final class Store {
                 ImageEntry e = new ImageEntry();
                 e.uri = o.optString("uri", "");
                 e.name = o.optString("name", "image");
+                e.file = o.optString("file", "");
                 readIds(o.optJSONArray("luts"), e.lutIds);
                 // 1.3.0 migration: a single applied LUT used to live in "lut".
                 String legacy = o.optString("lut", "");
@@ -149,6 +152,7 @@ public final class Store {
                 JSONObject o = new JSONObject();
                 o.put("uri", e.uri);
                 o.put("name", e.name);
+                o.put("file", e.file == null ? "" : e.file);
                 o.put("luts", idsJson(e.lutIds));
                 o.put("adj", e.adj == null ? "" : e.adj.encode());
                 o.put("ver", e.version);

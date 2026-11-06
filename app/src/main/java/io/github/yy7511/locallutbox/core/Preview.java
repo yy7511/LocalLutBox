@@ -104,14 +104,15 @@ public final class Preview {
         if (images.isEmpty()) {
             return PreviewFactory.get();
         }
-        String uri = images.get(0).uri;
-        String key = "img:" + uri;
+        Store.ImageEntry first = images.get(0);
+        File backup = ImageBackup.existing(first);
+        String key = "img:" + (backup != null ? backup.getAbsolutePath() : first.uri);
         synchronized (Preview.class) {
             if (cache != null && !cache.isRecycled() && key.equals(cacheKey)) {
                 return cache;
             }
             try {
-                Bitmap b = ImageUtil.decodeUri(c.getContentResolver(), Uri.parse(uri), 1200);
+                Bitmap b = ImageUtil.decodeEntry(c, first, 1200);
                 if (b != null) {
                     cache = b;
                     cacheKey = key;
