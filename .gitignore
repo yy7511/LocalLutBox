@@ -3,6 +3,8 @@ build/
 *.iml
 *.keystore
 *.idsig
+/build.sh
+/tools/
 tools/debug.keystore
 LutDarkroom-*.apk
 LocalLutBox-*.apk

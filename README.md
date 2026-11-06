@@ -24,7 +24,7 @@
 
 ## 安装
 
-从 [Releases](https://github.com/yy7511/LocalLutBox/releases) 下载最新 `LocalLutBox-x.y.z.apk`，允许「安装未知来源应用」后安装。
+仓库只包含应用源码，不包含构建脚本与 APK 安装包。
 
 - 包名：`io.github.yy7511.locallutbox`
 - 最低 Android 7.0（API 24），targetSdk 33
@@ -38,20 +38,6 @@
 2. 自动处理首次开启只记录现有文件，之后新增的才处理；输出文件名含 `_LUT`（如 `原名_LUT.jpg` / `原名_LUT_v2.jpg`），会被自动忽略，避免循环处理
 3. LUT 库长按条目可设置目标色彩空间、删除；「更换预览图」可用自己的照片作为预览底图
 4. 编辑页保存：弹出导出面板，可选择尺寸/比例、JPEG 质量、版本号与水印；默认写入相册 `Pictures/Lut暗房`，若已配置自动输出文件夹也可写入该文件夹
-
-## 构建
-
-不需要 Gradle / Android Studio，使用 Android SDK 命令行工具直接产出签名 APK：
-
-```bash
-SDK=/path/to/android-sdk ./build.sh
-```
-
-流程：`aapt2 compile/link` → `javac --release 8` → `R8` → `aapt2 optimize` → 打包 dex → `zipalign` → `apksigner`。产物为 `LocalLutBox-<version>.apk`。
-
-- 需要 Android SDK Platform 34 与 Build-Tools（34+）
-- 签名密钥不随仓库分发，构建时读取 `$KS`（默认 `~/.lutbox/locallutbox.keystore`），可用环境变量 `KS` / `KS_PASS` / `KEY_ALIAS` 覆盖
-- `build.sh` 结束时会调用 `tools/publish.sh`：推送到 `main` 并把 APK 上传到对应 tag 的 Release
 
 ## 目录结构
 
@@ -69,9 +55,6 @@ app/src/main/
     core/                     解析、管线、色彩空间、EXIF、存储
     ui/                       自定义控件（直方图、矢量图、滑块）、LUT 详情
   res/                        布局、矢量图标、主题与颜色（含 values-night）
-tools/keep.pro                R8 保留规则
-tools/make_icons.py           图标生成脚本
-build.sh                      手工构建脚本
 ```
 
 ## 实现说明
