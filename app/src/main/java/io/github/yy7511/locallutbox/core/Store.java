@@ -391,39 +391,162 @@ public final class Store {
         sp(c).edit().putInt("export_quality", Math.max(1, Math.min(100, quality))).apply();
     }
 
+    /* ---- Watermark presets: each preset holds one or more text stamps. ---- */
+
+    public static final String WM_DEFAULT_ID = "local_lutbox";
+
+    public static final class WmItem {
+        public String text = "";
+        public int pos = Watermark.BOTTOM_CENTER;
+        public int opacity = 65;
+
+        public WmItem() {
+        }
+
+        public WmItem(String text, int pos, int opacity) {
+            this.text = text;
+            this.pos = pos;
+            this.opacity = opacity;
+        }
+    }
+
+    public static final class WmPreset {
+        public String id;
+        public String name;
+        public ArrayList<WmItem> items = new ArrayList<WmItem>();
+
+        public WmPreset() {
+        }
+
+        public WmPreset(String id, String name) {
+            this.id = id;
+            this.name = name;
+        }
+
+        public WmPreset copy() {
+            WmPreset p = new WmPreset(id, name);
+            for (int i = 0; i < items.size(); i++) {
+                WmItem it = items.get(i);
+                p.items.add(new WmItem(it.text, it.pos, it.opacity));
+            }
+            return p;
+        }
+    }
+
     public static boolean watermarkOn(Context c) {
-        return sp(c).getBoolean("export_watermark", false);
+        return sp(c).getBoolean("export_watermark", true);
     }
 
     public static void setWatermarkOn(Context c, boolean on) {
         sp(c).edit().putBoolean("export_watermark", on).apply();
     }
 
-    public static String watermarkText(Context c) {
-        String s = sp(c).getString("export_watermark_text", "LUT 暗房");
-        return s == null ? "" : s;
+    /** All presets, always including the built-in LocalLutBox one. */
+    public static ArrayList<WmPreset> wmPresets(Context c) {
+        ArrayList<WmPreset> list = new ArrayList<WmPreset>();
+        String raw = sp(c).getString("wm_presets", "");
+        if (raw != null && raw.length() > 0) {
+            try {
+                JSONArray arr = new JSONArray(raw);
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject o = arr.optJSONObject(i);
+                    if (o == null) {
+                        continue;
+                    }
+                    WmPreset p = new WmPreset(o.optString("id", ""), o.optString("name", ""));
+                    JSONArray its = o.optJSONArray("items");
+                    if (its != null) {
+                        for (int k = 0; k < its.length(); k++) {
+                            JSONObject io = its.optJSONObject(k);
+                            if (io == null) {
+                                continue;
+                            }
+                            p.items.add(new WmItem(io.optString("text", ""),
+                                    Math.max(0, Math.min(Watermark.BOTTOM_CENTER, io.optInt("pos", Watermark.BOTTOM_CENTER))),
+                                    Math.max(10, Math.min(100, io.optInt("opacity", 65)))));
+                        }
+                    }
+                    if (p.id.length() > 0) {
+                        list.add(p);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        boolean hasDefault = false;
+        for (int i = 0; i < list.size(); i++) {
+            if (WM_DEFAULT_ID.equals(list.get(i).id)) {
+                hasDefault = true;
+                break;
+            }
+        }
+        if (!hasDefault) {
+            list.add(0, defaultPreset());
+            saveWmPresets(c, list);
+        }
+        return list;
     }
 
-    public static void setWatermarkText(Context c, String text) {
-        sp(c).edit().putString("export_watermark_text", text == null ? "" : text).apply();
+    /** Built-in preset: the LocalLutBox mark, bottom centre. */
+    public static WmPreset defaultPreset() {
+        WmPreset p = new WmPreset(WM_DEFAULT_ID, "LocalLutBox");
+        p.items.add(new WmItem("LocalLutBox", Watermark.BOTTOM_CENTER, 65));
+        return p;
     }
 
-    /** Watermark position: 0 bottom-right, 1 bottom-left, 2 top-right, 3 top-left, 4 center. */
-    public static int watermarkPos(Context c) {
-        return Math.max(0, Math.min(4, sp(c).getInt("export_watermark_pos", 0)));
+    public static void saveWmPresets(Context c, List<WmPreset> list) {
+        JSONArray arr = new JSONArray();
+        for (int i = 0; i < list.size(); i++) {
+            WmPreset p = list.get(i);
+            try {
+                JSONObject o = new JSONObject();
+                o.put("id", p.id);
+                o.put("name", p.name == null ? "" : p.name);
+                JSONArray its = new JSONArray();
+                for (int k = 0; k < p.items.size(); k++) {
+                    WmItem it = p.items.get(k);
+                    JSONObject io = new JSONObject();
+                    io.put("text", it.text == null ? "" : it.text);
+                    io.put("pos", it.pos);
+                    io.put("opacity", it.opacity);
+                    its.put(io);
+                }
+                o.put("items", its);
+                arr.put(o);
+            } catch (Exception ignored) {
+            }
+        }
+        sp(c).edit().putString("wm_presets", arr.toString()).apply();
     }
 
-    public static void setWatermarkPos(Context c, int pos) {
-        sp(c).edit().putInt("export_watermark_pos", Math.max(0, Math.min(4, pos))).apply();
+    public static String wmSelectedId(Context c) {
+        String id = sp(c).getString("wm_selected", "");
+        if (id == null || id.length() == 0) {
+            return WM_DEFAULT_ID;
+        }
+        return id;
     }
 
-    /** Watermark opacity in percent (10..100). */
-    public static int watermarkOpacity(Context c) {
-        return Math.max(10, Math.min(100, sp(c).getInt("export_watermark_opacity", 65)));
+    public static void setWmSelectedId(Context c, String id) {
+        sp(c).edit().putString("wm_selected", id == null ? "" : id).apply();
     }
 
-    public static void setWatermarkOpacity(Context c, int pct) {
-        sp(c).edit().putInt("export_watermark_opacity", Math.max(10, Math.min(100, pct))).apply();
+    /** Selected preset, falling back to the built-in mark when it was deleted. */
+    public static WmPreset selectedWmPreset(Context c) {
+        ArrayList<WmPreset> list = wmPresets(c);
+        String id = wmSelectedId(c);
+        for (int i = 0; i < list.size(); i++) {
+            WmPreset p = list.get(i);
+            if (id.equals(p.id)) {
+                return p;
+            }
+        }
+        for (int i = 0; i < list.size(); i++) {
+            if (WM_DEFAULT_ID.equals(list.get(i).id)) {
+                return list.get(i);
+            }
+        }
+        return list.get(0);
     }
 
     /** App theme preference: true = dark (default), false = light. */
@@ -433,5 +556,14 @@ public final class Store {
 
     public static void setDarkMode(Context c, boolean dark) {
         sp(c).edit().putBoolean("dark_mode", dark).apply();
+    }
+
+    /** True once the one-off gesture tips have been shown. */
+    public static boolean tipsShown(Context c) {
+        return sp(c).getBoolean("tips_shown", false);
+    }
+
+    public static void setTipsShown(Context c, boolean shown) {
+        sp(c).edit().putBoolean("tips_shown", shown).apply();
     }
 }

@@ -135,28 +135,40 @@
             android:textColor="@color/text"
             android:textSize="13sp" />
 
-        <EditText
-            android:id="@+id/watermarkInput"
+        <TextView
+            android:id="@+id/watermarkPresetLabel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:background="@drawable/bg_chip"
-            android:hint="水印文字"
-            android:inputType="text"
-            android:paddingLeft="12dp"
-            android:paddingRight="12dp"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:textColor="@color/text"
-            android:textColorHint="@color/muted"
-            android:textSize="12sp" />
+            android:layout_marginTop="2dp"
+            android:text="水印预设（可在首选项编辑）"
+            android:textColor="@color/muted"
+            android:textSize="10sp" />
 
-        <LinearLayout
-            android:id="@+id/watermarkPosRow"
+        <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:orientation="horizontal" />
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:id="@+id/watermarkPresetRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+        </HorizontalScrollView>
+
+        <TextView
+            android:id="@+id/watermarkManage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:text="管理水印预设 ›"
+            android:textColor="@color/accent"
+            android:textSize="11sp"
+            android:clickable="true"
+            android:focusable="true" />
 
         <TextView
             android:id="@+id/destLabel"

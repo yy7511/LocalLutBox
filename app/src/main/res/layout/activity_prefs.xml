@@ -148,64 +148,51 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:text="导出时添加水印"
+                android:text="导出时默认添加水印"
                 android:textColor="@color/text"
                 android:textSize="13sp" />
 
-            <EditText
-                android:id="@+id/watermarkText"
+            <TextView
+                style="@style/PrefsLabel"
+                android:layout_marginTop="10dp"
+                android:text="水印预设" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="导出时只能选择这里的预设；一个预设可包含多个水印。"
+                android:textColor="@color/muted"
+                android:textSize="10sp" />
+
+            <LinearLayout
+                android:id="@+id/watermarkPresetList"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/btnAddWmPreset"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
                 android:background="@drawable/bg_chip"
                 android:paddingLeft="12dp"
                 android:paddingRight="12dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:textColor="@color/text"
-                android:textSize="12sp"
-                android:hint="水印文字"
-                android:textColorHint="@color/muted" />
-
-            <TextView
-                style="@style/PrefsLabel"
-                android:layout_marginTop="10dp"
-                android:text="水印位置" />
-
-            <LinearLayout
-                android:id="@+id/watermarkPosRow"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal" />
-
-            <TextView
-                style="@style/PrefsLabel"
-                android:layout_marginTop="10dp"
-                android:text="水印不透明度" />
-
-            <SeekBar
-                android:id="@+id/watermarkOpacityBar"
-                android:layout_width="match_parent"
-                android:layout_height="30dp"
-                android:max="100"
-                android:progressTint="@color/accent"
-                android:progressBackgroundTint="@color/stroke"
-                android:thumbTint="@color/accent" />
-
-            <TextView
-                android:id="@+id/watermarkOpacityValue"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="end"
-                android:textColor="@color/muted"
-                android:textSize="11sp" />
+                android:paddingTop="7dp"
+                android:paddingBottom="7dp"
+                android:text="＋ 新建水印预设"
+                android:textColor="@color/accent"
+                android:textSize="11sp"
+                android:clickable="true"
+                android:focusable="true" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
                 android:gravity="center"
-                android:text="LocalLutBox 1.4.2"
+                android:text="LocalLutBox 1.4.3"
                 android:textColor="@color/muted"
                 android:textSize="11sp" />
         </LinearLayout>

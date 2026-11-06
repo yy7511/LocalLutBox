@@ -12,10 +12,12 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
@@ -46,6 +48,7 @@ import io.github.yy7511.locallutbox.ui.VectorscopeView;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -108,6 +111,16 @@ public class EditorActivity extends BaseActivity {
     private float touchDownX;
     private float touchDownY;
     private long touchDownAt;
+    private boolean firstRunTips;
+    private ScaleGestureDetector scaleDetector;
+    private float zoom = 1f;
+    private float panX;
+    private float panY;
+    private float lastFocusX;
+    private float lastFocusY;
+    private boolean pinchActive;
+
+    private static final float MAX_ZOOM = 5f;
 
     private final Runnable compareOn = new Runnable() {
         @Override
@@ -115,6 +128,7 @@ public class EditorActivity extends BaseActivity {
             if (original != null && rendered != null) {
                 compareHeld = true;
                 imgPreview.setImageBitmap(original);
+                compareHint.setVisibility(View.VISIBLE);
                 compareHint.setText("原图");
             }
         }
@@ -172,6 +186,17 @@ public class EditorActivity extends BaseActivity {
         bindActions();
         selectTab(0);
         applyGraph();
+        firstRunTips = !Store.tipsShown(this);
+        if (firstRunTips) {
+            Store.setTipsShown(this, true);
+            main.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    Ui.toast(EditorActivity.this,
+                            "单击图片全屏 · 全屏后双指缩放 · 按住图片对比原图");
+                }
+            }, 700);
+        }
         loadCurrent();
     }
 
@@ -182,6 +207,12 @@ public class EditorActivity extends BaseActivity {
         for (int i = 0; i < 9; i++) {
             sliders[i] = Ui.addSlider(adjustList, names[i], 200, 100, "0.00");
             final int which = i;
+            sliders[i].value.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    promptValue(which);
+                }
+            });
             sliders[i].bar.setOnSeekBarChangeListener(new Ui.SeekAdapter() {
                 @Override
                 public void onStartTrackingTouch(SeekBar seekBar) {
@@ -200,6 +231,41 @@ public class EditorActivity extends BaseActivity {
                 }
             });
         }
+    }
+
+    /** Direct numeric entry when the value label beside a slider is tapped. */
+    private void promptValue(final int which) {
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER
+                | InputType.TYPE_NUMBER_FLAG_DECIMAL
+                | InputType.TYPE_NUMBER_FLAG_SIGNED);
+        input.setGravity(Gravity.CENTER);
+        input.setText(String.format(Locale.US, "%.2f", getField(which)));
+        input.setSelection(input.getText().length());
+        final float limit = which == 0 ? 2f : 1f;
+        new AlertDialog.Builder(this)
+                .setTitle(names[which])
+                .setMessage(which == 0 ? "输入范围 -2.00 ~ +2.00" : "输入范围 -1.00 ~ +1.00")
+                .setView(input)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("确定", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int w) {
+                        float v;
+                        try {
+                            v = Float.parseFloat(input.getText().toString().trim());
+                        } catch (Exception e) {
+                            Ui.toast(EditorActivity.this, "请输入数字");
+                            return;
+                        }
+                        v = Math.max(-limit, Math.min(limit, v));
+                        pushHistory();
+                        setField(which, v);
+                        syncSliders();
+                        scheduleRender();
+                    }
+                })
+                .show();
     }
 
     private void bindTabs() {
@@ -225,6 +291,17 @@ public class EditorActivity extends BaseActivity {
     }
 
     private void bindActions() {
+        scaleDetector = new ScaleGestureDetector(this,
+                new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                    @Override
+                    public boolean onScale(ScaleGestureDetector detector) {
+                        if (!fullscreen) {
+                            return false;
+                        }
+                        applyZoom(zoom * detector.getScaleFactor());
+                        return true;
+                    }
+                });
         findViewById(R.id.btnBack).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -277,17 +354,57 @@ public class EditorActivity extends BaseActivity {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
                 int action = event.getActionMasked();
+                if (fullscreen && (event.getPointerCount() > 1
+                        || action == MotionEvent.ACTION_POINTER_DOWN)) {
+                    main.removeCallbacks(compareOn);
+                    pinchActive = true;
+                    if (compareHeld) {
+                        compareHeld = false;
+                        if (rendered != null && !rendered.isRecycled()) {
+                            imgPreview.setImageBitmap(rendered);
+                        }
+                        updateHint();
+                    }
+                    scaleDetector.onTouchEvent(event);
+                    if (action == MotionEvent.ACTION_POINTER_DOWN) {
+                        lastFocusX = scaleDetector.getFocusX();
+                        lastFocusY = scaleDetector.getFocusY();
+                    } else if (action == MotionEvent.ACTION_MOVE) {
+                        float fx = scaleDetector.getFocusX();
+                        float fy = scaleDetector.getFocusY();
+                        imgPreview.setTranslationX(imgPreview.getTranslationX() + fx - lastFocusX);
+                        imgPreview.setTranslationY(imgPreview.getTranslationY() + fy - lastFocusY);
+                        lastFocusX = fx;
+                        lastFocusY = fy;
+                        clampPan();
+                    }
+                    if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                        pinchActive = false;
+                    }
+                    return true;
+                }
                 if (action == MotionEvent.ACTION_DOWN) {
                     touchDownX = event.getX();
                     touchDownY = event.getY();
+                    panX = touchDownX;
+                    panY = touchDownY;
                     touchDownAt = SystemClock.uptimeMillis();
-                    main.postDelayed(compareOn, 200);
+                    if (zoom == 1f) {
+                        main.postDelayed(compareOn, 200);
+                    }
                     return true;
                 }
                 if (action == MotionEvent.ACTION_MOVE) {
                     if (Math.abs(event.getX() - touchDownX) > touchSlop
                             || Math.abs(event.getY() - touchDownY) > touchSlop) {
                         main.removeCallbacks(compareOn);
+                    }
+                    if (zoom > 1f) {
+                        imgPreview.setTranslationX(imgPreview.getTranslationX() + event.getX() - panX);
+                        imgPreview.setTranslationY(imgPreview.getTranslationY() + event.getY() - panY);
+                        panX = event.getX();
+                        panY = event.getY();
+                        clampPan();
                     }
                     return true;
                 }
@@ -296,6 +413,16 @@ public class EditorActivity extends BaseActivity {
                     boolean still = Math.abs(event.getX() - touchDownX) <= touchSlop
                             && Math.abs(event.getY() - touchDownY) <= touchSlop;
                     long held = SystemClock.uptimeMillis() - touchDownAt;
+                    if (pinchActive) {
+                        pinchActive = false;
+                        return true;
+                    }
+                    if (zoom > 1f) {
+                        if (still && held < 260) {
+                            resetZoom();
+                        }
+                        return true;
+                    }
                     if (compareHeld) {
                         compareHeld = false;
                         if (rendered != null && !rendered.isRecycled()) {
@@ -309,6 +436,7 @@ public class EditorActivity extends BaseActivity {
                 }
                 if (action == MotionEvent.ACTION_CANCEL) {
                     main.removeCallbacks(compareOn);
+                    pinchActive = false;
                     if (compareHeld) {
                         compareHeld = false;
                         if (rendered != null && !rendered.isRecycled()) {
@@ -322,9 +450,39 @@ public class EditorActivity extends BaseActivity {
         });
     }
 
+    private void applyZoom(float next) {
+        zoom = Math.max(1f, Math.min(MAX_ZOOM, next));
+        imgPreview.setScaleX(zoom);
+        imgPreview.setScaleY(zoom);
+        if (zoom == 1f) {
+            imgPreview.setTranslationX(0);
+            imgPreview.setTranslationY(0);
+        } else {
+            clampPan();
+        }
+    }
+
+    private void clampPan() {
+        float maxX = imgPreview.getWidth() * (zoom - 1f) / 2f;
+        float maxY = imgPreview.getHeight() * (zoom - 1f) / 2f;
+        imgPreview.setTranslationX(Math.max(-maxX, Math.min(maxX, imgPreview.getTranslationX())));
+        imgPreview.setTranslationY(Math.max(-maxY, Math.min(maxY, imgPreview.getTranslationY())));
+    }
+
+    private void resetZoom() {
+        zoom = 1f;
+        imgPreview.setScaleX(1f);
+        imgPreview.setScaleY(1f);
+        imgPreview.setTranslationX(0);
+        imgPreview.setTranslationY(0);
+    }
+
     /** Single tap toggles the immersive preview; the chrome is hidden while fullscreen. */
     private void toggleFullscreen() {
         fullscreen = !fullscreen;
+        if (!fullscreen) {
+            resetZoom();
+        }
         int vis = fullscreen ? View.GONE : View.VISIBLE;
         editorBar.setVisibility(vis);
         pagerBar.setVisibility(vis);
@@ -358,9 +516,19 @@ public class EditorActivity extends BaseActivity {
     }
 
     private void updateHint() {
+        if (compareHeld) {
+            compareHint.setVisibility(View.VISIBLE);
+            compareHint.setText("原图");
+            return;
+        }
+        if (!firstRunTips) {
+            compareHint.setVisibility(View.GONE);
+            return;
+        }
+        compareHint.setVisibility(View.VISIBLE);
         compareHint.setText(fullscreen
-                ? "点击图片退出全屏 · 按住对比原图"
-                : "点击图片全屏 · 按住对比原图");
+                ? "点击图片退出全屏 · 双指缩放 · 按住对比原图"
+                : "点击图片全屏 · 双指缩放 · 按住对比原图");
     }
 
     /** Fullscreen inspection of a LUT: parameters + preview with the current edits applied. */
@@ -667,7 +835,7 @@ public class EditorActivity extends BaseActivity {
                             old.recycle();
                         }
                         if (!compareHeld) {
-                            compareHint.setText("按住图片对比原图");
+                            updateHint();
                         }
                         histogram.setHistogram(h);
                         vectorscope.setData(vc, vr, vg, vb);
@@ -927,9 +1095,7 @@ public class EditorActivity extends BaseActivity {
         int quality;
         int version;
         boolean watermark;
-        String watermarkText;
-        int watermarkPos;
-        int watermarkOpacity;
+        ArrayList<Store.WmItem> watermarkItems = new ArrayList<Store.WmItem>();
         boolean toFolder;
     }
 
@@ -949,13 +1115,23 @@ public class EditorActivity extends BaseActivity {
         final EditText versionInput = (EditText) dv.findViewById(R.id.versionInput);
         final TextView nameHint = (TextView) dv.findViewById(R.id.nameHint);
         final CheckBox wmCheck = (CheckBox) dv.findViewById(R.id.watermarkCheck);
-        final EditText wmInput = (EditText) dv.findViewById(R.id.watermarkInput);
-        final LinearLayout wmPosRow = (LinearLayout) dv.findViewById(R.id.watermarkPosRow);
+        final LinearLayout wmPresetRow = (LinearLayout) dv.findViewById(R.id.watermarkPresetRow);
+        final TextView wmPresetLabel = (TextView) dv.findViewById(R.id.watermarkPresetLabel);
+        final TextView wmManage = (TextView) dv.findViewById(R.id.watermarkManage);
         final TextView destLabel = (TextView) dv.findViewById(R.id.destLabel);
         final LinearLayout destRow = (LinearLayout) dv.findViewById(R.id.destRow);
 
         final int[] mode = {Store.exportSizeMode(this)};
-        final int[] wmPos = {Store.watermarkPos(this)};
+        final ArrayList<Store.WmPreset> presets = Store.wmPresets(this);
+        int selected = 0;
+        for (int i = 0; i < presets.size(); i++) {
+            if (presets.get(i).id.equals(Store.wmSelectedId(this))) {
+                selected = i;
+                break;
+            }
+        }
+        final int[] wmSel = {selected};
+        final AlertDialog[] holder = new AlertDialog[1];
         final int[] dest = {0};
         final int nextVersion = Math.max(1, entry.version + 1);
         final String base = ImageUtil.baseName(entry.name);
@@ -964,7 +1140,6 @@ public class EditorActivity extends BaseActivity {
         qualityBar.setProgress(Store.exportQuality(this));
         qualityValue.setText(String.valueOf(Store.exportQuality(this)));
         wmCheck.setChecked(Store.watermarkOn(this));
-        wmInput.setText(Store.watermarkText(this));
 
         final Runnable syncSize = new Runnable() {
             @Override
@@ -1023,20 +1198,39 @@ public class EditorActivity extends BaseActivity {
             }
         });
 
-        wmInput.setVisibility(wmCheck.isChecked() ? View.VISIBLE : View.GONE);
-        wmPosRow.setVisibility(wmCheck.isChecked() ? View.VISIBLE : View.GONE);
-        fillChoiceRow(wmPosRow, new String[]{"右下", "左下", "右上", "左上", "居中"}, wmPos[0], new Choice() {
+        String[] presetNames = new String[presets.size()];
+        for (int i = 0; i < presets.size(); i++) {
+            presetNames[i] = presets.get(i).name;
+        }
+        fillChoiceRow(wmPresetRow, presetNames, wmSel[0], new Choice() {
             @Override
             public void onPick(int index) {
-                wmPos[0] = index;
+                wmSel[0] = index;
             }
         });
+        final Runnable syncWm = new Runnable() {
+            @Override
+            public void run() {
+                int vis = wmCheck.isChecked() ? View.VISIBLE : View.GONE;
+                wmPresetLabel.setVisibility(vis);
+                wmPresetRow.setVisibility(vis);
+                wmManage.setVisibility(vis);
+            }
+        };
+        syncWm.run();
         wmCheck.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
-                int vis = isChecked ? View.VISIBLE : View.GONE;
-                wmInput.setVisibility(vis);
-                wmPosRow.setVisibility(vis);
+                syncWm.run();
+            }
+        });
+        wmManage.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (holder[0] != null) {
+                    holder[0].dismiss();
+                }
+                startActivity(new Intent(EditorActivity.this, PrefsActivity.class));
             }
         });
 
@@ -1075,6 +1269,7 @@ public class EditorActivity extends BaseActivity {
                 .setNegativeButton("取消", null)
                 .setPositiveButton("导出", null)
                 .create();
+        holder[0] = dialog;
         dialog.setOnShowListener(new DialogInterface.OnShowListener() {
             @Override
             public void onShow(DialogInterface d) {
@@ -1088,19 +1283,26 @@ public class EditorActivity extends BaseActivity {
                         o.quality = Math.max(1, qualityBar.getProgress());
                         o.version = Math.max(1, number(versionInput, nextVersion));
                         o.watermark = wmCheck.isChecked();
-                        o.watermarkText = wmInput.getText().toString().trim();
-                        o.watermarkPos = wmPos[0];
-                        o.watermarkOpacity = Store.watermarkOpacity(EditorActivity.this);
+                        Store.WmPreset preset = presets.get(wmSel[0]);
+                        o.watermarkItems = preset.copy().items;
                         o.toFolder = hasOut && dest[0] == 1;
-                        if (o.watermark && o.watermarkText.length() == 0) {
-                            Ui.toast(EditorActivity.this, "请输入水印文字");
-                            return;
+                        if (o.watermark) {
+                            boolean any = false;
+                            for (int i = 0; i < o.watermarkItems.size(); i++) {
+                                if (o.watermarkItems.get(i).text.trim().length() > 0) {
+                                    any = true;
+                                    break;
+                                }
+                            }
+                            if (!any) {
+                                Ui.toast(EditorActivity.this, "所选预设没有内容，请先在首选项编辑");
+                                return;
+                            }
                         }
                         Store.setExportSizeMode(EditorActivity.this, o.sizeMode);
                         Store.setExportQuality(EditorActivity.this, o.quality);
                         Store.setWatermarkOn(EditorActivity.this, o.watermark);
-                        Store.setWatermarkText(EditorActivity.this, o.watermarkText);
-                        Store.setWatermarkPos(EditorActivity.this, o.watermarkPos);
+                        Store.setWmSelectedId(EditorActivity.this, preset.id);
                         dialog.dismiss();
                         doSave(o);
                     }
@@ -1218,7 +1420,10 @@ public class EditorActivity extends BaseActivity {
                         throw new Exception("渲染失败");
                     }
                     if (o.watermark) {
-                        Watermark.draw(out, o.watermarkText, o.watermarkPos, o.watermarkOpacity);
+                        for (int i = 0; i < o.watermarkItems.size(); i++) {
+                            Store.WmItem it = o.watermarkItems.get(i);
+                            Watermark.draw(out, it.text, it.pos, it.opacity);
+                        }
                     }
                     java.io.File exifFile = ImageBackup.existing(expEntry);
                     Uri exifUri = Uri.parse(uriStr);

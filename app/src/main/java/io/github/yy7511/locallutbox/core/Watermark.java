@@ -14,6 +14,7 @@ public final class Watermark {
     public static final int TOP_RIGHT = 2;
     public static final int TOP_LEFT = 3;
     public static final int CENTER = 4;
+    public static final int BOTTOM_CENTER = 5;
 
     private Watermark() {
     }
@@ -60,6 +61,10 @@ public final class Watermark {
             case CENTER:
                 x = (w - tw) / 2f;
                 baseline = (h - fm.ascent - fm.descent) / 2f;
+                break;
+            case BOTTOM_CENTER:
+                x = (w - tw) / 2f;
+                baseline = h - pad - fm.descent;
                 break;
             default:
                 x = w - pad - tw;
