@@ -205,7 +205,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
                 android:gravity="center"
-                android:text="LocalLutBox 1.4.1"
+                android:text="LocalLutBox 1.4.2"
                 android:textColor="@color/muted"
                 android:textSize="11sp" />
         </LinearLayout>

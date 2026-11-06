@@ -284,9 +284,7 @@ public class MainActivity extends BaseActivity {
             }
             Store.ImageEntry e = entries.get(position);
             ImageView thumb = (ImageView) view.findViewById(R.id.thumb);
-            TextView name = (TextView) view.findViewById(R.id.thumbName);
             TextView badge = (TextView) view.findViewById(R.id.thumbBadge);
-            name.setText(e.name);
             int layers = e.lutIds == null ? 0 : e.lutIds.size();
             badge.setVisibility(layers > 0 ? View.VISIBLE : View.GONE);
             badge.setText(layers > 1 ? "LUT×" + layers : "LUT");

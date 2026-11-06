@@ -79,16 +79,13 @@ public final class ThumbLoader {
 
     /**
      * Thumbnail of the graded photo (adjustments + LUT stack), so the main grid
-     * previews what the editor shows instead of the untouched original.
+     * previews what the editor shows instead of the untouched original. The whole
+     * frame is kept (fit, not cropped) so the photo keeps its real aspect ratio.
      */
     public static void loadGraded(final ImageView view, final String uri, final String file,
                                   final Adjust adj, final List<String> lutIds, final int sizeDp) {
         if (uri == null || uri.length() == 0) {
             view.setImageDrawable(null);
-            return;
-        }
-        if ((lutIds == null || lutIds.isEmpty()) && (adj == null || adj.isNeutral())) {
-            load(view, uri, file, sizeDp);
             return;
         }
         final Context app = view.getContext().getApplicationContext();
@@ -111,19 +108,19 @@ public final class ThumbLoader {
                 Bitmap out = null;
                 try {
                     Bitmap full = decodeSource(app, uri, file, px * 2);
-                    Bitmap square = squareThumb(full, px);
-                    if (square != null) {
-                        Lut[] luts = LutManager.loadAll(app, java.util.Arrays.asList(ids));
-                        Bitmap rendered = Renderer.render(square, luts, adjCopy, px, ColorSpace.SRGB);
-                        if (rendered != null) {
-                            if (rendered != square && !square.isRecycled()) {
-                                square.recycle();
-                            }
-                            out = rendered;
+                    if (full != null) {
+                        if (ids.length == 0 && adjCopy.isNeutral()) {
+                            out = fitThumb(full, px);
                         } else {
-                            out = square;
+                            Lut[] luts = LutManager.loadAll(app, java.util.Arrays.asList(ids));
+                            out = Renderer.render(full, luts, adjCopy, px, ColorSpace.SRGB);
+                            if (!full.isRecycled()) {
+                                full.recycle();
+                            }
                         }
-                        CACHE.put(key, out);
+                        if (out != null) {
+                            CACHE.put(key, out);
+                        }
                     }
                 } catch (Exception | OutOfMemoryError ignored) {
                 }
@@ -139,6 +136,27 @@ public final class ThumbLoader {
             return ImageUtil.decodeFile(backup, maxDim);
         }
         return ImageUtil.decodeUri(app.getContentResolver(), android.net.Uri.parse(uri), maxDim);
+    }
+
+    /** Scales the whole frame down to {@code maxDim} on the long edge; never crops. */
+    private static Bitmap fitThumb(Bitmap full, int maxDim) {
+        if (full == null) {
+            return null;
+        }
+        int w = full.getWidth();
+        int h = full.getHeight();
+        int max = Math.max(w, h);
+        if (max <= maxDim) {
+            return full;
+        }
+        float s = maxDim / (float) max;
+        int tw = Math.max(1, Math.round(w * s));
+        int th = Math.max(1, Math.round(h * s));
+        Bitmap out = Bitmap.createScaledBitmap(full, tw, th, true);
+        if (out != full) {
+            full.recycle();
+        }
+        return out;
     }
 
     /** Center-crops to a square and scales down to {@code px}; recycles the input. */

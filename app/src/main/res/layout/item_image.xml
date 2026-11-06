@@ -1,20 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
     android:padding="4dp">
 
     <FrameLayout
+        android:id="@+id/thumbFrame"
         android:layout_width="match_parent"
-        android:layout_height="108dp"
-        android:background="@drawable/bg_thumb">
+        android:layout_height="wrap_content"
+        android:minHeight="108dp"
+        android:background="@drawable/bg_thumb_frame"
+        android:padding="3dp">
 
         <ImageView
             android:id="@+id/thumb"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="centerCrop"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
             android:contentDescription="图片缩略图" />
 
         <TextView
@@ -32,20 +35,5 @@
             android:textColor="@color/accent"
             android:textSize="10sp"
             android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/thumbName"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom"
-            android:background="@drawable/bg_overlay"
-            android:ellipsize="middle"
-            android:maxLines="1"
-            android:paddingLeft="7dp"
-            android:paddingRight="7dp"
-            android:paddingTop="14dp"
-            android:paddingBottom="6dp"
-            android:textColor="@color/text"
-            android:textSize="10sp" />
     </FrameLayout>
-</LinearLayout>
+</FrameLayout>
