@@ -49,6 +49,19 @@ public final class ImageUtil {
         return false;
     }
 
+    /**
+     * True when the file was written by this app (manual save or auto processing).
+     * Such files carry a {@code _LUT} marker in the name; matching anywhere in the
+     * name also covers system de-duplication suffixes like {@code A_LUT (1).jpg}.
+     */
+    public static boolean isAppOutput(String name) {
+        if (name == null) {
+            return false;
+        }
+        String lower = name.toLowerCase(Locale.US);
+        return isImageName(name) && lower.contains("_lut");
+    }
+
     public static String baseName(String name) {
         if (name == null) {
             return "image";

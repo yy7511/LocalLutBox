@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="io.github.yy7511.locallutbox"
-    android:versionCode="16"
-    android:versionName="1.3.2">
+    android:versionCode="18"
+    android:versionName="1.4.0">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="33" />
 
@@ -34,6 +34,12 @@
 
         <activity
             android:name=".EditorActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
+            android:name=".PrefsActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:configChanges="orientation|screenSize|keyboardHidden" />

@@ -11,12 +11,16 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -32,6 +36,7 @@ import io.github.yy7511.locallutbox.core.Lut;
 import io.github.yy7511.locallutbox.core.LutManager;
 import io.github.yy7511.locallutbox.core.Renderer;
 import io.github.yy7511.locallutbox.core.Store;
+import io.github.yy7511.locallutbox.core.Watermark;
 import io.github.yy7511.locallutbox.ui.HistogramView;
 import io.github.yy7511.locallutbox.ui.LutDetail;
 import io.github.yy7511.locallutbox.ui.ThumbLoader;
@@ -61,8 +66,8 @@ public class EditorActivity extends BaseActivity {
 
     private final ArrayList<State> undoStack = new ArrayList<State>();
     private final ArrayList<State> redoStack = new ArrayList<State>();
-    private TextView btnUndo;
-    private TextView btnRedo;
+    private ImageView btnUndo;
+    private ImageView btnRedo;
 
     /** Snapshot of all editable state for one image. */
     private static final class State {
@@ -94,8 +99,6 @@ public class EditorActivity extends BaseActivity {
     private HistogramView histogram;
     private VectorscopeView vectorscope;
     private View analysisStrip;
-    private TextView btnGraph;
-    private TextView btnLutSize;
     private View editorBar;
     private View pagerBar;
     private View panel;
@@ -140,10 +143,8 @@ public class EditorActivity extends BaseActivity {
         tabLut = (TextView) findViewById(R.id.tabLut);
         lutHint = (TextView) findViewById(R.id.lutHint);
         analysisStrip = findViewById(R.id.analysisStrip);
-        btnGraph = (TextView) findViewById(R.id.btnGraph);
-        btnLutSize = (TextView) findViewById(R.id.btnLutSize);
-        btnUndo = (TextView) findViewById(R.id.btnUndo);
-        btnRedo = (TextView) findViewById(R.id.btnRedo);
+        btnUndo = (ImageView) findViewById(R.id.btnUndo);
+        btnRedo = (ImageView) findViewById(R.id.btnRedo);
         histogram = (HistogramView) findViewById(R.id.histogram);
         vectorscope = (VectorscopeView) findViewById(R.id.vectorscope);
         editorBar = findViewById(R.id.editorBar);
@@ -170,7 +171,6 @@ public class EditorActivity extends BaseActivity {
         bindActions();
         selectTab(0);
         applyGraph();
-        syncSizeButton();
         loadCurrent();
     }
 
@@ -272,21 +272,6 @@ public class EditorActivity extends BaseActivity {
                 redo();
             }
         });
-        btnGraph.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showGraphDialog();
-            }
-        });
-        btnLutSize.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                int next = (Store.lutThumbSize(EditorActivity.this) + 1) % 3;
-                Store.setLutThumbSize(EditorActivity.this, next);
-                syncSizeButton();
-                buildLutChips();
-            }
-        });
         imgPreview.setOnTouchListener(new View.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
@@ -363,28 +348,6 @@ public class EditorActivity extends BaseActivity {
             vp.weight = 0;
         }
         vectorscope.setLayoutParams(vp);
-    }
-
-    private void showGraphDialog() {
-        final String[] items = {"直方图", "矢量图", "直方图 + 矢量图", "关闭"};
-        int checked = Store.graphChoice(this);
-        new AlertDialog.Builder(this)
-                .setTitle("编辑页显示")
-                .setSingleChoiceItems(items, checked, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        Store.setGraphChoice(EditorActivity.this, which);
-                        applyGraph();
-                        dialog.dismiss();
-                    }
-                })
-                .setNegativeButton("取消", null)
-                .show();
-    }
-
-    private void syncSizeButton() {
-        String[] labels = {"小", "中", "大"};
-        btnLutSize.setText("预览大小：" + labels[Store.lutThumbSize(this)]);
     }
 
     /** LUT preview edge in dp; level 0/1/2 -> 56 / 72 / 92. */
@@ -566,10 +529,15 @@ public class EditorActivity extends BaseActivity {
     }
 
     private void updateUndoRedoButtons() {
-        btnUndo.setEnabled(!undoStack.isEmpty());
-        btnRedo.setEnabled(!redoStack.isEmpty());
-        btnUndo.setTextColor(!undoStack.isEmpty() ? Ui.ACCENT : Ui.MUTED);
-        btnRedo.setTextColor(!redoStack.isEmpty() ? Ui.ACCENT : Ui.MUTED);
+        // Icon-only controls: enabled state is conveyed by tint + alpha.
+        tintIcon(btnUndo, !undoStack.isEmpty());
+        tintIcon(btnRedo, !redoStack.isEmpty());
+    }
+
+    private void tintIcon(ImageView view, boolean active) {
+        view.setEnabled(active);
+        view.setAlpha(active ? 1f : 0.45f);
+        view.setImageTintList(android.content.res.ColorStateList.valueOf(active ? Ui.ACCENT : Ui.MUTED));
     }
 
     private int valueToProgress(int which, float v) {
@@ -943,31 +911,265 @@ public class EditorActivity extends BaseActivity {
         loadCurrent();
     }
 
+    /** Values collected from the export dialog. */
+    private static final class ExportOpts {
+        int sizeMode;
+        int longEdge;
+        int ratio;
+        int quality;
+        int version;
+        boolean watermark;
+        String watermarkText;
+        int watermarkPos;
+        int watermarkOpacity;
+        boolean toFolder;
+    }
+
+    private interface Choice {
+        void onPick(int index);
+    }
+
     private void saveWithDialog() {
         if (entry == null) {
             return;
         }
-        final Store.AutoCfg cfg = Store.auto(this);
-        boolean hasOut = cfg.outTree != null && cfg.outTree.length() > 0;
+        final View dv = getLayoutInflater().inflate(R.layout.dialog_export, null);
+        final LinearLayout sizeRow = (LinearLayout) dv.findViewById(R.id.sizeRow);
+        final EditText sizeValue = (EditText) dv.findViewById(R.id.sizeValue);
+        final TextView qualityValue = (TextView) dv.findViewById(R.id.qualityValue);
+        final SeekBar qualityBar = (SeekBar) dv.findViewById(R.id.qualityBar);
+        final EditText versionInput = (EditText) dv.findViewById(R.id.versionInput);
+        final TextView nameHint = (TextView) dv.findViewById(R.id.nameHint);
+        final CheckBox wmCheck = (CheckBox) dv.findViewById(R.id.watermarkCheck);
+        final EditText wmInput = (EditText) dv.findViewById(R.id.watermarkInput);
+        final LinearLayout wmPosRow = (LinearLayout) dv.findViewById(R.id.watermarkPosRow);
+        final TextView destLabel = (TextView) dv.findViewById(R.id.destLabel);
+        final LinearLayout destRow = (LinearLayout) dv.findViewById(R.id.destRow);
+
+        final int[] mode = {Store.exportSizeMode(this)};
+        final int[] wmPos = {Store.watermarkPos(this)};
+        final int[] dest = {0};
+        final int nextVersion = Math.max(1, entry.version + 1);
+        final String base = ImageUtil.baseName(entry.name);
+
+        versionInput.setText(String.valueOf(nextVersion));
+        qualityBar.setProgress(Store.exportQuality(this));
+        qualityValue.setText(String.valueOf(Store.exportQuality(this)));
+        wmCheck.setChecked(Store.watermarkOn(this));
+        wmInput.setText(Store.watermarkText(this));
+
+        final Runnable syncSize = new Runnable() {
+            @Override
+            public void run() {
+                if (mode[0] == Store.SIZE_ORIGINAL) {
+                    sizeValue.setVisibility(View.GONE);
+                } else {
+                    sizeValue.setVisibility(View.VISIBLE);
+                    if (mode[0] == Store.SIZE_LONG_EDGE) {
+                        sizeValue.setHint("长边像素，例如 2048");
+                        sizeValue.setText(String.valueOf(Store.exportLongEdge(EditorActivity.this)));
+                    } else {
+                        sizeValue.setHint("比例 %（1-100）");
+                        sizeValue.setText(String.valueOf(Store.exportRatio(EditorActivity.this)));
+                    }
+                }
+            }
+        };
+        syncSize.run();
+        fillChoiceRow(sizeRow, new String[]{"原图尺寸", "长边像素", "缩放比例"}, mode[0], new Choice() {
+            @Override
+            public void onPick(int index) {
+                mode[0] = index;
+                syncSize.run();
+            }
+        });
+        sizeValue.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                int v = number(sizeValue, 0);
+                if (v <= 0) {
+                    return;
+                }
+                if (mode[0] == Store.SIZE_LONG_EDGE) {
+                    Store.setExportLongEdge(EditorActivity.this, v);
+                } else if (mode[0] == Store.SIZE_RATIO) {
+                    Store.setExportRatio(EditorActivity.this, v);
+                }
+            }
+        });
+
+        qualityBar.setOnSeekBarChangeListener(new Ui.SeekAdapter() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int q = Math.max(1, progress);
+                qualityValue.setText(String.valueOf(q));
+                Store.setExportQuality(EditorActivity.this, q);
+            }
+        });
+
+        wmInput.setVisibility(wmCheck.isChecked() ? View.VISIBLE : View.GONE);
+        wmPosRow.setVisibility(wmCheck.isChecked() ? View.VISIBLE : View.GONE);
+        fillChoiceRow(wmPosRow, new String[]{"右下", "左下", "右上", "左上", "居中"}, wmPos[0], new Choice() {
+            @Override
+            public void onPick(int index) {
+                wmPos[0] = index;
+            }
+        });
+        wmCheck.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
+                int vis = isChecked ? View.VISIBLE : View.GONE;
+                wmInput.setVisibility(vis);
+                wmPosRow.setVisibility(vis);
+            }
+        });
+
+        final boolean hasOut = Store.auto(this).outTree != null && Store.auto(this).outTree.length() > 0;
         if (hasOut) {
-            new AlertDialog.Builder(this)
-                    .setTitle("保存图片")
-                    .setItems(new String[]{"保存到相册（Pictures/LUT暗房）", "保存到自动输出文件夹"},
-                            new DialogInterface.OnClickListener() {
-                                @Override
-                                public void onClick(DialogInterface dialog, int which) {
-                                    doSave(which == 1);
-                                }
-                            })
-                    .setNegativeButton("取消", null)
-                    .show();
+            fillChoiceRow(destRow, new String[]{"相册", "输出文件夹"}, 0, new Choice() {
+                @Override
+                public void onPick(int index) {
+                    dest[0] = index;
+                }
+            });
         } else {
-            doSave(false);
+            destLabel.setVisibility(View.GONE);
+            destRow.setVisibility(View.GONE);
+        }
+
+        versionInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                updateNameHint(nameHint, base, versionInput);
+            }
+        });
+        updateNameHint(nameHint, base, versionInput);
+
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("导出图片")
+                .setView(dv)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("导出", null)
+                .create();
+        dialog.setOnShowListener(new DialogInterface.OnShowListener() {
+            @Override
+            public void onShow(DialogInterface d) {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        ExportOpts o = new ExportOpts();
+                        o.sizeMode = mode[0];
+                        o.longEdge = Store.exportLongEdge(EditorActivity.this);
+                        o.ratio = Store.exportRatio(EditorActivity.this);
+                        o.quality = Math.max(1, qualityBar.getProgress());
+                        o.version = Math.max(1, number(versionInput, nextVersion));
+                        o.watermark = wmCheck.isChecked();
+                        o.watermarkText = wmInput.getText().toString().trim();
+                        o.watermarkPos = wmPos[0];
+                        o.watermarkOpacity = Store.watermarkOpacity(EditorActivity.this);
+                        o.toFolder = hasOut && dest[0] == 1;
+                        if (o.watermark && o.watermarkText.length() == 0) {
+                            Ui.toast(EditorActivity.this, "请输入水印文字");
+                            return;
+                        }
+                        Store.setExportSizeMode(EditorActivity.this, o.sizeMode);
+                        Store.setExportQuality(EditorActivity.this, o.quality);
+                        Store.setWatermarkOn(EditorActivity.this, o.watermark);
+                        Store.setWatermarkText(EditorActivity.this, o.watermarkText);
+                        Store.setWatermarkPos(EditorActivity.this, o.watermarkPos);
+                        dialog.dismiss();
+                        doSave(o);
+                    }
+                });
+            }
+        });
+        dialog.show();
+    }
+
+    private int number(EditText input, int fallback) {
+        try {
+            return Integer.parseInt(input.getText().toString().trim());
+        } catch (Exception e) {
+            return fallback;
         }
     }
 
-    private void doSave(final boolean toFolder) {
-        final String name = ImageUtil.baseName(entry.name) + "_LUT.jpg";
+    private void updateNameHint(TextView hint, String base, EditText input) {
+        int v = Math.max(1, number(input, 1));
+        hint.setText(base + "_LUT_v" + v + ".jpg");
+    }
+
+    private TextView choiceChip(LinearLayout row, String label) {
+        TextView t = Ui.text(this, label, 11, Ui.MUTED);
+        t.setGravity(Gravity.CENTER);
+        t.setBackgroundResource(R.drawable.bg_chip);
+        t.setPadding(Ui.dp(this, 12), Ui.dp(this, 7), Ui.dp(this, 12), Ui.dp(this, 7));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.rightMargin = Ui.dp(this, 6);
+        row.addView(t, lp);
+        t.setClickable(true);
+        t.setFocusable(true);
+        return t;
+    }
+
+    private void fillChoiceRow(LinearLayout row, String[] labels, int selected, final Choice choice) {
+        row.removeAllViews();
+        for (int i = 0; i < labels.length; i++) {
+            final int index = i;
+            TextView chip = choiceChip(row, labels[i]);
+            styleChoice(chip, i == selected);
+            chip.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    for (int k = 0; k < row.getChildCount(); k++) {
+                        styleChoice((TextView) row.getChildAt(k), k == index);
+                    }
+                    choice.onPick(index);
+                }
+            });
+        }
+    }
+
+    private void styleChoice(TextView t, boolean selected) {
+        t.setBackgroundResource(selected ? R.drawable.bg_chip_sel : R.drawable.bg_chip);
+        t.setTextColor(selected ? Ui.ACCENT : Ui.MUTED);
+        t.setTypeface(null, selected ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+    }
+
+    /** Long-edge limit for the chosen export size; 0 = keep the decoded size. */
+    private static int targetLongEdge(ExportOpts o, Bitmap bmp) {
+        int max = Math.max(bmp.getWidth(), bmp.getHeight());
+        if (o.sizeMode == Store.SIZE_LONG_EDGE) {
+            return Math.min(o.longEdge, max);
+        }
+        if (o.sizeMode == Store.SIZE_RATIO) {
+            return Math.max(1, Math.round(max * o.ratio / 100f));
+        }
+        return 0;
+    }
+
+    private void doSave(final ExportOpts o) {
+        final String name = ImageUtil.baseName(entry.name) + "_LUT_v" + o.version + ".jpg";
+        entry.version = Math.max(entry.version, o.version);
+        Store.saveImages(this, entries);
+        final String uriStr = entry.uri;
         final Lut[] stack = luts;
         final Adjust savedAdj = adj.copy();
         final ProgressDialog pd = new ProgressDialog(this);
@@ -986,8 +1188,8 @@ public class EditorActivity extends BaseActivity {
                 boolean reduced = false;
                 try {
                     try {
-                        full = ImageUtil.decodeUri(getContentResolver(), Uri.parse(entry.uri), 0);
-                        out = Renderer.render(full, stack, savedAdj, 0, srcSpace);
+                        full = ImageUtil.decodeUri(getContentResolver(), Uri.parse(uriStr), 0);
+                        out = Renderer.render(full, stack, savedAdj, targetLongEdge(o, full), srcSpace);
                     } catch (OutOfMemoryError oom) {
                         if (full != null) {
                             full.recycle();
@@ -995,21 +1197,30 @@ public class EditorActivity extends BaseActivity {
                         }
                         out = null;
                         reduced = true;
-                        full = ImageUtil.decodeUri(getContentResolver(), Uri.parse(entry.uri), 4096);
-                        out = Renderer.render(full, stack, savedAdj, 4096, srcSpace);
+                        full = ImageUtil.decodeUri(getContentResolver(), Uri.parse(uriStr), 4096);
+                        int target = targetLongEdge(o, full);
+                        if (target <= 0 || target > 4096) {
+                            target = 4096;
+                        }
+                        out = Renderer.render(full, stack, savedAdj, target, srcSpace);
                     }
                     if (out == null) {
                         throw new Exception("渲染失败");
                     }
-                    Uri exifSource = Uri.parse(entry.uri);
+                    if (o.watermark) {
+                        Watermark.draw(out, o.watermarkText, o.watermarkPos, o.watermarkOpacity);
+                    }
+                    Uri exifSource = Uri.parse(uriStr);
                     String note = reduced ? "（内存不足，已按长边 4096 导出）" : "";
-                    if (toFolder) {
+                    String info = "v" + o.version + " · 长边 " + Math.max(out.getWidth(), out.getHeight())
+                            + " · 质量 " + o.quality + (o.watermark ? " · 水印" : "");
+                    if (o.toFolder) {
                         String tree = Store.auto(EditorActivity.this).outTree;
-                        ImageUtil.saveToTree(getContentResolver(), tree, name, out, 100, exifSource);
-                        msg = "已保存到自动输出文件夹（原图尺寸 · EXIF 已保留）" + note;
+                        ImageUtil.saveToTree(getContentResolver(), tree, name, out, o.quality, exifSource);
+                        msg = "已保存到自动输出文件夹（" + info + " · EXIF 已保留）" + note;
                     } else {
-                        ImageUtil.saveToGallery(EditorActivity.this, out, name, 100, exifSource);
-                        msg = "已保存到相册 Pictures/LUT暗房（原图尺寸 · EXIF 已保留）" + note;
+                        ImageUtil.saveToGallery(EditorActivity.this, out, name, o.quality, exifSource);
+                        msg = "已保存到相册 Pictures/LUT暗房（" + info + " · EXIF 已保留）" + note;
                     }
                 } catch (Exception e) {
                     msg = "保存失败：" + e.getMessage();
@@ -1040,6 +1251,7 @@ public class EditorActivity extends BaseActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        applyGraph();
         if (loadedOnce && entry != null) {
             int before = luts.length;
             loadLutStack();

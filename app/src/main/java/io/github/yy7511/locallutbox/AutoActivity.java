@@ -370,7 +370,7 @@ public class AutoActivity extends BaseActivity {
                     ArrayList<ImageUtil.Doc> docs = ImageUtil.listDocs(getContentResolver(), tree);
                     for (int i = 0; i < docs.size(); i++) {
                         ImageUtil.Doc d = docs.get(i);
-                        if (d.name != null && d.name.endsWith("_LUT.jpg")) {
+                        if (ImageUtil.isAppOutput(d.name)) {
                             continue;
                         }
                         name = d.name;

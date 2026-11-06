@@ -65,13 +65,10 @@ public class MainActivity extends BaseActivity {
             }
         });
 
-        TextView btnTheme = (TextView) findViewById(R.id.btnTheme);
-        btnTheme.setText(darkMode ? "浅色" : "深色");
-        btnTheme.setOnClickListener(new View.OnClickListener() {
+        findViewById(R.id.btnPrefs).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Store.setDarkMode(MainActivity.this, !darkMode);
-                recreate();
+                startActivity(new Intent(MainActivity.this, PrefsActivity.class));
             }
         });
 
@@ -233,7 +230,8 @@ public class MainActivity extends BaseActivity {
             int layers = e.lutIds == null ? 0 : e.lutIds.size();
             badge.setVisibility(layers > 0 ? View.VISIBLE : View.GONE);
             badge.setText(layers > 1 ? "LUT×" + layers : "LUT");
-            ThumbLoader.load(thumb, e.uri, 110);
+            // Show the graded result (adjustments + LUT stack) instead of the raw photo.
+            ThumbLoader.loadGraded(thumb, e.uri, e.adj, e.lutIds, 110);
             return view;
         }
     }

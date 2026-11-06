@@ -34,6 +34,8 @@ public final class Store {
         /** Applied LUTs, bottom layer first. Empty = straight to the source photo. */
         public ArrayList<String> lutIds = new ArrayList<String>();
         public Adjust adj = new Adjust();
+        /** Highest export version used for this photo; 0 = never exported. */
+        public int version;
 
         public ImageEntry() {
         }
@@ -130,6 +132,7 @@ public final class Store {
                     e.lutIds.add(legacy);
                 }
                 e.adj = Adjust.decode(o.optString("adj", ""));
+                e.version = o.optInt("ver", 0);
                 if (e.uri.length() > 0) {
                     list.add(e);
                 }
@@ -148,6 +151,7 @@ public final class Store {
                 o.put("name", e.name);
                 o.put("luts", idsJson(e.lutIds));
                 o.put("adj", e.adj == null ? "" : e.adj.encode());
+                o.put("ver", e.version);
                 arr.put(o);
             }
         } catch (Exception ignored) {
@@ -336,6 +340,86 @@ public final class Store {
 
     public static void setGraphChoice(Context c, int choice) {
         sp(c).edit().putInt("editor_graph", Math.max(0, Math.min(3, choice))).apply();
+    }
+
+    /* ---- Export defaults (shared by the editor dialog and the preferences page). ---- */
+
+    /** Export size: keep the original pixel size. */
+    public static final int SIZE_ORIGINAL = 0;
+    /** Export size: limit the long edge to a pixel value. */
+    public static final int SIZE_LONG_EDGE = 1;
+    /** Export size: scale the photo to a percentage of its original size. */
+    public static final int SIZE_RATIO = 2;
+
+    public static int exportSizeMode(Context c) {
+        return Math.max(SIZE_ORIGINAL, Math.min(SIZE_RATIO, sp(c).getInt("export_size_mode", SIZE_ORIGINAL)));
+    }
+
+    public static void setExportSizeMode(Context c, int mode) {
+        sp(c).edit().putInt("export_size_mode", Math.max(SIZE_ORIGINAL, Math.min(SIZE_RATIO, mode))).apply();
+    }
+
+    /** Long-edge pixel limit used by {@link #SIZE_LONG_EDGE}. */
+    public static int exportLongEdge(Context c) {
+        int v = sp(c).getInt("export_long_edge", 2048);
+        return v < 64 ? 2048 : v;
+    }
+
+    public static void setExportLongEdge(Context c, int px) {
+        sp(c).edit().putInt("export_long_edge", Math.max(64, px)).apply();
+    }
+
+    /** Scale percentage (1..100) used by {@link #SIZE_RATIO}. */
+    public static int exportRatio(Context c) {
+        return Math.max(1, Math.min(100, sp(c).getInt("export_ratio", 100)));
+    }
+
+    public static void setExportRatio(Context c, int pct) {
+        sp(c).edit().putInt("export_ratio", Math.max(1, Math.min(100, pct))).apply();
+    }
+
+    /** JPEG quality (1..100, 100 = keep the most detail). */
+    public static int exportQuality(Context c) {
+        return Math.max(1, Math.min(100, sp(c).getInt("export_quality", 100)));
+    }
+
+    public static void setExportQuality(Context c, int quality) {
+        sp(c).edit().putInt("export_quality", Math.max(1, Math.min(100, quality))).apply();
+    }
+
+    public static boolean watermarkOn(Context c) {
+        return sp(c).getBoolean("export_watermark", false);
+    }
+
+    public static void setWatermarkOn(Context c, boolean on) {
+        sp(c).edit().putBoolean("export_watermark", on).apply();
+    }
+
+    public static String watermarkText(Context c) {
+        String s = sp(c).getString("export_watermark_text", "LUT 暗房");
+        return s == null ? "" : s;
+    }
+
+    public static void setWatermarkText(Context c, String text) {
+        sp(c).edit().putString("export_watermark_text", text == null ? "" : text).apply();
+    }
+
+    /** Watermark position: 0 bottom-right, 1 bottom-left, 2 top-right, 3 top-left, 4 center. */
+    public static int watermarkPos(Context c) {
+        return Math.max(0, Math.min(4, sp(c).getInt("export_watermark_pos", 0)));
+    }
+
+    public static void setWatermarkPos(Context c, int pos) {
+        sp(c).edit().putInt("export_watermark_pos", Math.max(0, Math.min(4, pos))).apply();
+    }
+
+    /** Watermark opacity in percent (10..100). */
+    public static int watermarkOpacity(Context c) {
+        return Math.max(10, Math.min(100, sp(c).getInt("export_watermark_opacity", 65)));
+    }
+
+    public static void setWatermarkOpacity(Context c, int pct) {
+        sp(c).edit().putInt("export_watermark_opacity", Math.max(10, Math.min(100, pct))).apply();
     }
 
     /** App theme preference: true = dark (default), false = light. */

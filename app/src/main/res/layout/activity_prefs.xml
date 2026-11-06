@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingLeft="8dp"
+        android:paddingRight="16dp">
+
+        <ImageView
+            android:id="@+id/btnBack"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:padding="8dp"
+            android:src="@drawable/ic_back"
+            android:tint="@color/text"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="返回" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginLeft="2dp"
+            android:text="首选项"
+            android:textColor="@color/text"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingLeft="20dp"
+            android:paddingRight="20dp"
+            android:paddingBottom="28dp">
+
+            <TextView
+                style="@style/PrefsSection"
+                android:text="外观" />
+
+            <TextView
+                style="@style/PrefsLabel"
+                android:text="主题" />
+
+            <LinearLayout
+                android:id="@+id/themeRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+
+            <TextView
+                style="@style/PrefsSection"
+                android:layout_marginTop="18dp"
+                android:text="编辑页" />
+
+            <TextView
+                style="@style/PrefsLabel"
+                android:text="LUT 缩略图大小" />
+
+            <LinearLayout
+                android:id="@+id/lutSizeRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+
+            <TextView
+                style="@style/PrefsLabel"
+                android:layout_marginTop="10dp"
+                android:text="分析图显示" />
+
+            <LinearLayout
+                android:id="@+id/graphRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+
+            <TextView
+                style="@style/PrefsSection"
+                android:layout_marginTop="18dp"
+                android:text="导出默认" />
+
+            <TextView
+                style="@style/PrefsLabel"
+                android:text="导出尺寸" />
+
+            <LinearLayout
+                android:id="@+id/exportModeRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+
+            <EditText
+                android:id="@+id/exportSizeValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_chip"
+                android:inputType="number"
+                android:maxLength="5"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:textColor="@color/text"
+                android:textSize="12sp"
+                android:hint="长边像素"
+                android:textColorHint="@color/muted" />
+
+            <TextView
+                style="@style/PrefsLabel"
+                android:layout_marginTop="10dp"
+                android:text="JPEG 质量" />
+
+            <SeekBar
+                android:id="@+id/qualityBar"
+                android:layout_width="match_parent"
+                android:layout_height="30dp"
+                android:max="100"
+                android:progressTint="@color/accent"
+                android:progressBackgroundTint="@color/stroke"
+                android:thumbTint="@color/accent" />
+
+            <TextView
+                android:id="@+id/qualityValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="end"
+                android:textColor="@color/muted"
+                android:textSize="11sp" />
+
+            <CheckBox
+                android:id="@+id/watermarkCheck"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="导出时添加水印"
+                android:textColor="@color/text"
+                android:textSize="13sp" />
+
+            <EditText
+                android:id="@+id/watermarkText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_chip"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:paddingTop="8dp"
+                android:paddingBottom="8dp"
+                android:textColor="@color/text"
+                android:textSize="12sp"
+                android:hint="水印文字"
+                android:textColorHint="@color/muted" />
+
+            <TextView
+                style="@style/PrefsLabel"
+                android:layout_marginTop="10dp"
+                android:text="水印位置" />
+
+            <LinearLayout
+                android:id="@+id/watermarkPosRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+
+            <TextView
+                style="@style/PrefsLabel"
+                android:layout_marginTop="10dp"
+                android:text="水印不透明度" />
+
+            <SeekBar
+                android:id="@+id/watermarkOpacityBar"
+                android:layout_width="match_parent"
+                android:layout_height="30dp"
+                android:max="100"
+                android:progressTint="@color/accent"
+                android:progressBackgroundTint="@color/stroke"
+                android:thumbTint="@color/accent" />
+
+            <TextView
+                android:id="@+id/watermarkOpacityValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="end"
+                android:textColor="@color/muted"
+                android:textSize="11sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:gravity="center"
+                android:text="LocalLutBox 1.4.0"
+                android:textColor="@color/muted"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

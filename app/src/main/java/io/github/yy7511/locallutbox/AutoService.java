@@ -214,7 +214,7 @@ public class AutoService extends Service {
             int failed = 0;
             for (int i = 0; i < docs.size() && done + failed < 300; i++) {
                 ImageUtil.Doc doc = docs.get(i);
-                if (isOutput(doc.name)) {
+                if (ImageUtil.isAppOutput(doc.name)) {
                     continue;
                 }
                 String k = key(doc);
@@ -306,14 +306,6 @@ public class AutoService extends Service {
                 out.recycle();
             }
         }
-    }
-
-    private static boolean isOutput(String name) {
-        if (name == null) {
-            return false;
-        }
-        String lower = name.toLowerCase(java.util.Locale.US);
-        return lower.endsWith("_lut.jpg") || lower.endsWith("_lut.jpeg") || lower.endsWith("_lut.png");
     }
 
     private static String key(ImageUtil.Doc d) {
