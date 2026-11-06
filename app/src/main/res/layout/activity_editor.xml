@@ -279,11 +279,13 @@
         </FrameLayout>
 
         <View
+            android:id="@+id/panelDivider"
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="@color/stroke" />
 
         <LinearLayout
+            android:id="@+id/panelTabs"
             android:layout_width="match_parent"
             android:layout_height="46dp"
             android:orientation="horizontal"

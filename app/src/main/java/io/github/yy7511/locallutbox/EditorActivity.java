@@ -119,8 +119,8 @@ public class EditorActivity extends BaseActivity {
     private float lastFocusX;
     private float lastFocusY;
     private boolean pinchActive;
-
-    private static final float MAX_ZOOM = 5f;
+    private float maxZoom = 5f;
+    private int currentTab;
 
     private final Runnable compareOn = new Runnable() {
         @Override
@@ -166,6 +166,7 @@ public class EditorActivity extends BaseActivity {
         pagerBar = findViewById(R.id.pagerBar);
         panel = findViewById(R.id.panel);
         touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
+        maxZoom = Store.zoomMax(this);
 
         entries.addAll(Store.images(this));
         if (entries.isEmpty()) {
@@ -284,10 +285,39 @@ public class EditorActivity extends BaseActivity {
     }
 
     private void selectTab(int which) {
+        currentTab = which;
         paneAdjust.setVisibility(which == 0 ? View.VISIBLE : View.GONE);
         paneLut.setVisibility(which == 1 ? View.VISIBLE : View.GONE);
         Ui.setTab(tabAdjust, which == 0);
         Ui.setTab(tabLut, which == 1);
+        updatePanelHeight();
+    }
+
+    /**
+     * The adjust pane keeps a fixed height for scrolling; the LUT pane shrinks to
+     * the chip row so no large blank area is left below it.
+     */
+    private void updatePanelHeight() {
+        final LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) panel.getLayoutParams();
+        if (currentTab == 0) {
+            lp.height = Ui.dp(this, 270);
+            panel.setLayoutParams(lp);
+            return;
+        }
+        panel.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (currentTab != 1 || paneLut.getChildCount() < 2) {
+                    return;
+                }
+                int hint = paneLut.getChildAt(0).getMeasuredHeight();
+                int frame = paneLut.getChildAt(1).getMeasuredHeight();
+                int tabs = findViewById(R.id.panelTabs).getHeight();
+                int total = hint + frame + tabs + Ui.dp(EditorActivity.this, 6);
+                lp.height = Math.max(Ui.dp(EditorActivity.this, 120), total);
+                panel.setLayoutParams(lp);
+            }
+        }, 60);
     }
 
     private void bindActions() {
@@ -298,7 +328,18 @@ public class EditorActivity extends BaseActivity {
                         if (!fullscreen) {
                             return false;
                         }
-                        applyZoom(zoom * detector.getScaleFactor());
+                        float factor = detector.getScaleFactor();
+                        // Ignore tiny finger jitter and cap per-frame jumps.
+                        if (Math.abs(factor - 1f) < 0.004f) {
+                            return true;
+                        }
+                        factor = Math.max(0.85f, Math.min(1.18f, factor));
+                        float fx = detector.getFocusX();
+                        float fy = detector.getFocusY();
+                        // Pinch around the actual focus so the image does not drift.
+                        imgPreview.setPivotX(fx);
+                        imgPreview.setPivotY(fy);
+                        applyZoom(zoom * factor);
                         return true;
                     }
                 });
@@ -372,11 +413,16 @@ public class EditorActivity extends BaseActivity {
                     } else if (action == MotionEvent.ACTION_MOVE) {
                         float fx = scaleDetector.getFocusX();
                         float fy = scaleDetector.getFocusY();
-                        imgPreview.setTranslationX(imgPreview.getTranslationX() + fx - lastFocusX);
-                        imgPreview.setTranslationY(imgPreview.getTranslationY() + fy - lastFocusY);
-                        lastFocusX = fx;
-                        lastFocusY = fy;
-                        clampPan();
+                        float dx = fx - lastFocusX;
+                        float dy = fy - lastFocusY;
+                        // Dead zone: ignore sub-pixel focus noise while pinching.
+                        if (Math.abs(dx) > 1.5f || Math.abs(dy) > 1.5f) {
+                            imgPreview.setTranslationX(imgPreview.getTranslationX() + dx);
+                            imgPreview.setTranslationY(imgPreview.getTranslationY() + dy);
+                            lastFocusX = fx;
+                            lastFocusY = fy;
+                            clampPan();
+                        }
                     }
                     if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                         pinchActive = false;
@@ -451,12 +497,14 @@ public class EditorActivity extends BaseActivity {
     }
 
     private void applyZoom(float next) {
-        zoom = Math.max(1f, Math.min(MAX_ZOOM, next));
+        zoom = Math.max(1f, Math.min(maxZoom, next));
         imgPreview.setScaleX(zoom);
         imgPreview.setScaleY(zoom);
         if (zoom == 1f) {
             imgPreview.setTranslationX(0);
             imgPreview.setTranslationY(0);
+            imgPreview.setPivotX(imgPreview.getWidth() / 2f);
+            imgPreview.setPivotY(imgPreview.getHeight() / 2f);
         } else {
             clampPan();
         }
@@ -475,6 +523,8 @@ public class EditorActivity extends BaseActivity {
         imgPreview.setScaleY(1f);
         imgPreview.setTranslationX(0);
         imgPreview.setTranslationY(0);
+        imgPreview.setPivotX(imgPreview.getWidth() / 2f);
+        imgPreview.setPivotY(imgPreview.getHeight() / 2f);
     }
 
     /** Single tap toggles the immersive preview; the chrome is hidden while fullscreen. */
@@ -860,6 +910,9 @@ public class EditorActivity extends BaseActivity {
             addManageChip("管理 LUT");
         }
         fillChipThumbs();
+        if (currentTab == 1) {
+            updatePanelHeight();
+        }
     }
 
     private void addLutChip(String name, final String lutId) {
@@ -1198,11 +1251,7 @@ public class EditorActivity extends BaseActivity {
             }
         });
 
-        String[] presetNames = new String[presets.size()];
-        for (int i = 0; i < presets.size(); i++) {
-            presetNames[i] = presets.get(i).name;
-        }
-        fillChoiceRow(wmPresetRow, presetNames, wmSel[0], new Choice() {
+        fillPresetPicker(wmPresetRow, presets, wmSel[0], new Choice() {
             @Override
             public void onPick(int index) {
                 wmSel[0] = index;
@@ -1337,6 +1386,49 @@ public class EditorActivity extends BaseActivity {
         t.setClickable(true);
         t.setFocusable(true);
         return t;
+    }
+
+    /** Full-width preset rows (no horizontal clipping); tap to select. */
+    private void fillPresetPicker(LinearLayout box, ArrayList<Store.WmPreset> presets,
+                                  int selected, final Choice choice) {
+        box.removeAllViews();
+        for (int i = 0; i < presets.size(); i++) {
+            final int index = i;
+            Store.WmPreset p = presets.get(i);
+            StringBuilder sb = new StringBuilder(p.name);
+            if (Store.WM_DEFAULT_ID.equals(p.id)) {
+                sb.append("  ·  默认");
+            }
+            sb.append("\n").append(p.items.size()).append(" 个水印");
+            for (int k = 0; k < p.items.size() && k < 2; k++) {
+                String t = p.items.get(k).text.trim();
+                if (t.length() > 0) {
+                    sb.append(k == 0 ? " · " : " / ").append(t);
+                }
+            }
+            TextView row = Ui.text(this, sb.toString(), 11,
+                    i == selected ? Ui.ACCENT : Ui.MUTED);
+            row.setBackgroundResource(i == selected ? R.drawable.bg_chip_sel : R.drawable.bg_chip);
+            row.setPadding(Ui.dp(this, 12), Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 8));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.bottomMargin = Ui.dp(this, 5);
+            row.setClickable(true);
+            row.setFocusable(true);
+            row.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    for (int k = 0; k < box.getChildCount(); k++) {
+                        TextView t = (TextView) box.getChildAt(k);
+                        boolean on = k == index;
+                        t.setBackgroundResource(on ? R.drawable.bg_chip_sel : R.drawable.bg_chip);
+                        t.setTextColor(on ? Ui.ACCENT : Ui.MUTED);
+                    }
+                    choice.onPick(index);
+                }
+            });
+            box.addView(row, lp);
+        }
     }
 
     private void fillChoiceRow(LinearLayout row, String[] labels, int selected, final Choice choice) {

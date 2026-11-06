@@ -81,6 +81,17 @@
             <TextView
                 style="@style/PrefsLabel"
                 android:layout_marginTop="10dp"
+                android:text="全屏最大放大倍数" />
+
+            <LinearLayout
+                android:id="@+id/zoomRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal" />
+
+            <TextView
+                style="@style/PrefsLabel"
+                android:layout_marginTop="10dp"
                 android:text="分析图显示" />
 
             <LinearLayout
@@ -192,7 +203,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
                 android:gravity="center"
-                android:text="LocalLutBox 1.4.3"
+                android:text="LocalLutBox 1.4.4"
                 android:textColor="@color/muted"
                 android:textSize="11sp" />
         </LinearLayout>

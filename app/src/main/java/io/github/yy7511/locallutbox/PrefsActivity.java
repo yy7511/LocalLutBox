@@ -50,6 +50,7 @@ public class PrefsActivity extends BaseActivity {
 
         buildTheme();
         buildLutSize();
+        buildZoom();
         buildGraph();
         buildExport();
         buildWatermarks();
@@ -72,6 +73,24 @@ public class PrefsActivity extends BaseActivity {
             @Override
             public void onPick(int index) {
                 Store.setLutThumbSize(PrefsActivity.this, index);
+            }
+        });
+    }
+
+    private void buildZoom() {
+        final int[] values = {3, 5, 8, 10};
+        int current = Store.zoomMax(this);
+        int selected = 1;
+        for (int i = 0; i < values.length; i++) {
+            if (values[i] == current) {
+                selected = i;
+            }
+        }
+        LinearLayout row = (LinearLayout) findViewById(R.id.zoomRow);
+        fillRow(row, new String[]{"3×", "5×", "8×", "10×"}, selected, new Pick() {
+            @Override
+            public void onPick(int index) {
+                Store.setZoomMax(PrefsActivity.this, values[index]);
             }
         });
     }
@@ -237,14 +256,19 @@ public class PrefsActivity extends BaseActivity {
                 }
             }
             TextView sub = Ui.text(this, sb.toString(), 10, Ui.MUTED);
-            sub.setMaxLines(2);
+            sub.setMaxLines(3);
             sub.setEllipsize(TextUtils.TruncateAt.END);
             sub.setPadding(0, Ui.dp(this, 3), 0, 0);
             card.addView(sub);
 
+            LinearLayout foot = new LinearLayout(this);
+            foot.setOrientation(LinearLayout.HORIZONTAL);
+            foot.setGravity(Gravity.CENTER_VERTICAL);
             TextView action = Ui.text(this, isSelected ? "导出默认" : "设为导出默认", 10,
                     isSelected ? Ui.ACCENT : Ui.MUTED);
             action.setPadding(0, Ui.dp(this, 6), 0, 0);
+            foot.addView(action, new LinearLayout.LayoutParams(0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             if (!isSelected) {
                 action.setClickable(true);
                 action.setFocusable(true);
@@ -256,7 +280,18 @@ public class PrefsActivity extends BaseActivity {
                     }
                 });
             }
-            card.addView(action);
+            TextView edit = Ui.text(this, "编辑 ›", 10, Ui.ACCENT);
+            edit.setPadding(Ui.dp(this, 8), Ui.dp(this, 6), 0, 0);
+            edit.setClickable(true);
+            edit.setFocusable(true);
+            edit.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    showPresetEditor(p, false);
+                }
+            });
+            foot.addView(edit);
+            card.addView(foot);
 
             card.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -336,7 +371,7 @@ public class PrefsActivity extends BaseActivity {
                     summary.setBackgroundResource(R.drawable.bg_chip);
                     summary.setPadding(Ui.dp(PrefsActivity.this, 10), Ui.dp(PrefsActivity.this, 7),
                             Ui.dp(PrefsActivity.this, 10), Ui.dp(PrefsActivity.this, 7));
-                    summary.setMaxLines(1);
+                    summary.setMaxLines(2);
                     summary.setEllipsize(TextUtils.TruncateAt.END);
                     summary.setClickable(true);
                     summary.setFocusable(true);
@@ -385,7 +420,7 @@ public class PrefsActivity extends BaseActivity {
             }
         });
         LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         alp.topMargin = Ui.dp(this, 2);
         box.addView(add, alp);
 

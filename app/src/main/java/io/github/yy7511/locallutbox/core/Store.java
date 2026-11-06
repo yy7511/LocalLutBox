@@ -558,6 +558,15 @@ public final class Store {
         sp(c).edit().putBoolean("dark_mode", dark).apply();
     }
 
+    /** Maximum pinch-zoom factor used by the fullscreen preview. */
+    public static int zoomMax(Context c) {
+        return Math.max(2, Math.min(10, sp(c).getInt("zoom_max", 5)));
+    }
+
+    public static void setZoomMax(Context c, int value) {
+        sp(c).edit().putInt("zoom_max", Math.max(2, Math.min(10, value))).apply();
+    }
+
     /** True once the one-off gesture tips have been shown. */
     public static boolean tipsShown(Context c) {
         return sp(c).getBoolean("tips_shown", false);
